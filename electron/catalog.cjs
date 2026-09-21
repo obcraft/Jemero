@@ -422,7 +422,7 @@ function rank(device, priority = 'balanced') {
 function reasons(pick, device, ranked, target) {
   const out = []
   out.push(
-    `${pick.sizeGB} GB of weights + ${pick.kvGB} GB of KV cache at ${(pick.ctx / 1024) | 0}k context fits inside your ${device.budgetGB} GB model budget (${device.ramGB} GB of unified memory, less what Chromium, the WebContainer sandbox and macOS need).`,
+    `${pick.sizeGB} GB of weights + ${pick.kvGB} GB of KV cache at ${(pick.ctx / 1024) | 0}k context fits inside your ${device.budgetGB} GB model budget (${device.ramGB} GB of unified memory, less what the app and macOS need).`,
   )
   out.push(
     pick.moe

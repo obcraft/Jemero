@@ -4,7 +4,7 @@
 
 # Jemero
 
-**Your offline coding agent.**<br/>
+**Your offline component studio.**<br/>
 Local · Offline · Free
 
 <br/>
@@ -26,9 +26,11 @@ Local · Offline · Free
 
 <br/>
 
-Describe an app in one sentence. Jemero writes it with an AI model that runs **on your
-Mac**, installs it, and runs it live in the window. Then you keep asking for changes in
-plain words. No cloud, no account, no API key, nothing to set up.
+Describe a UI component, block or section. Jemero designs and builds it with an AI model
+that runs **on your Mac**, using the UI kit you pick, and renders it live on a canvas:
+just the component, interactive, in milliseconds. Then you keep refining it, ask for a
+review, step back through versions or edit the code yourself. No cloud, no account, no
+API key, nothing to install.
 
 ## Highlights
 
@@ -37,7 +39,10 @@ plain words. No cloud, no account, no API key, nothing to set up.
 | **Built-in AI runtime** | llama.cpp ships inside the app and runs on the GPU. No terminal, no other apps. |
 | **Sized to your Mac** | Jemero reads your chip and memory and marks the best model that fits, already quantized for speed. |
 | **One-click models** | 15 verified coding models. Downloads resume if interrupted and are checked against Hugging Face's SHA-256. |
-| **Live preview** | The generated app runs in a sandbox right in the window. Missing packages and imports are fixed for you. |
+| **Any component** | Components (pickers, inputs, menus), blocks (forms, cards, panels) or full-width sections (heroes, pricing, footers). |
+| **Your UI kit** | shadcn/ui, Headless UI, plain Tailwind, Material UI or Mantine, bundled in the app. Switch kits and Jemero rebuilds the component with the new one. |
+| **Live canvas** | Only the component, rendered offline in milliseconds, with its states side by side, light/dark and phone/tablet/desktop widths. |
+| **Refine and review** | Plan first, then code. Ask for a review, tick the points worth fixing, apply them. Every change is a version you can go back to. |
 | **Private** | Everything happens on your Mac. Nothing you type leaves it. |
 | **Light on your Mac** | Closing Jemero stops the model and hands its memory straight back to macOS. |
 
@@ -45,7 +50,7 @@ plain words. No cloud, no account, no API key, nothing to set up.
 
 1. **[Download Jemero-arm64.dmg](https://github.com/obcraft/Jemero/releases/latest/download/Jemero-arm64.dmg)**, open it, and drag Jemero into **Applications**.
 2. Open Jemero. The first time, macOS asks once: go to **System Settings → Privacy & Security** and click **Open Anyway**.
-3. The model list opens with the best model for your Mac marked **Best**. Click **Get**: it downloads, starts, and drops you straight into the chat.
+3. The model list opens with the best model for your Mac marked **Best**. Click **Get**: it downloads, starts, and drops you straight into the studio.
 
 > [!NOTE]
 > Requires an Apple Silicon Mac (M1 or later) on macOS 13+. Models take 1.5 to 60 GB of disk space depending on size.
@@ -102,25 +107,34 @@ comes from the model's own config, so "too big" is a fact, not a guess. Run
 
 ```mermaid
 flowchart LR
-    A["💬 Your prompt"] --> B["🧠 Quantized model<br/>llama.cpp on Metal"]
-    B -- "streams files" --> C["📄 Code view"]
-    C --> D["📦 Sandbox<br/>npm install · Vite"]
-    D --> E["▶️ Live preview"]
-    E -- "ask for a change" --> A
+    A["💬 Describe a component"] --> B["🧠 Quantized model<br/>llama.cpp on Metal"]
+    B -- "plan + one .jsx file" --> C["🔧 Compiler<br/>repairs imports, strips JSX"]
+    C --> D["🖼️ Canvas<br/>sandboxed, offline kits"]
+    D -- "refine · review · edit" --> A
 ```
 
-The model writes complete files into a React + Vite project that already includes
-Tailwind, shadcn/ui components, icons and charts, so even a small model produces
-something that looks designed. Files appear while the model is still typing; packages
-install in parallel; the preview hot-reloads on every follow-up.
+Every UI kit is bundled into the app ahead of time, so a component renders the moment the
+model closes its file: no `npm install`, no dev server, no network. The model writes one
+file per component: the component itself, a `Preview` with realistic sample data, and
+optionally a few named `variants` (empty, error, disabled…) that the canvas shows side by
+side. Before anything renders, Jemero repairs what small models get wrong: a forgotten
+import, an icon name that doesn't exist, a package that isn't installed.
+
+- **Refine** in plain words, or with one click on a suggestion.
+- **Review**: the model critiques its own component (accessibility, states, polish); you
+  pick the points worth fixing and apply them as one change.
+- **Versions**: every change is kept. Step back, and refine from any version.
+- **Code**: edit by hand and the canvas follows as you type. Copy the component and the
+  kit files it uses straight into a project.
+- **Console**: what the component logs, form submissions and React's warnings, for testing.
 
 ## Settings
 
 |  |  |
 |---|---|
-| **General** | Theme (system, dark, light) · animations · thinking on/off · show reasoning · follow the build between tabs · auto-fix imports · auto-install packages |
-| **Generation** | Model priority · answer length · memory · temperature · top-p |
-| **System prompt** | Edit or replace the built-in prompt |
+| **General** | Theme (system, dark, light) · animations · thinking on/off · show reasoning · plan before coding · watch the code being written · repair imports |
+| **Generation** | Model priority · answer length · temperature · top-p |
+| **System prompt** | Edit or replace the built-in rules (the output format and kit brief are always added) |
 
 **Shortcuts:** <kbd>⌘</kbd> <kbd>L</kbd> models · <kbd>⌘</kbd> <kbd>,</kbd> settings · <kbd>⌘</kbd> <kbd>↵</kbd> generate · <kbd>Esc</kbd> stop
 
@@ -131,7 +145,7 @@ install in parallel; the preview hot-reloads on every follow-up.
 ```bash
 git clone https://github.com/obcraft/Jemero.git && cd Jemero
 npm install
-npm start          # the app, with hot reload
+npm start          # the app, with hot reload (bundles the UI kits on first run)
 npm run dist       # → release/Jemero-arm64.dmg
 ```
 
@@ -143,6 +157,7 @@ npm run dist       # → release/Jemero-arm64.dmg
 | Script | |
 |---|---|
 | `npm start` | Run the app in development |
+| `npm run kits` | Rebuild the canvas's UI kit bundles into `public/kits` (automatic when an input changed) |
 | `npm run models` | What this Mac should run, and why (`--priority speed\|quality`, `--json`) |
 | `npm run models:install` | Download the recommendation (`-- --install <id>` for another) |
 | `npm run serve` / `npm run stop` | Start / stop the model server without the window |
@@ -158,10 +173,9 @@ npm run dist       # → release/Jemero-arm64.dmg
 <br/>
 
 ```
-prompt ──► llama-server (built in, Metal) ──► <file> blocks ──► WebContainer
-             127.0.0.1:8757/v1                                  npm install
-             via same-origin proxy at /llm                       npm run dev
-                                                                 └─► preview
+prompt ──► llama-server (built in, Metal) ──► <plan> + <file> ──► compiler ──► canvas
+             127.0.0.1:8757/v1                                   sucrase       sandboxed iframe
+             via same-origin proxy at /llm                       import fixes  import map → /kits
 ```
 
 | File | Role |
@@ -170,27 +184,32 @@ prompt ──► llama-server (built in, Metal) ──► <file> blocks ──�
 | `electron/model.cjs` | Starts, stops and switches the server; remembers your last model; only ever stops its own process. |
 | `electron/hardware.cjs` · `catalog.cjs` | Read the Mac (chip, memory, GPU cores, bandwidth) and rank the model catalog for it. |
 | `electron/install.cjs` | The model store: resumable, SHA-256-verified downloads. |
-| `src/lib/llm.ts` | Streaming OpenAI-compatible client; keeps reasoning out of the file stream. |
-| `src/lib/parser.ts` | Pulls `<file>` and `<install>` blocks out of the stream as it arrives. |
-| `src/lib/template.ts` · `uikit.ts` | The Vite + React scaffold and design system the model builds on. |
-| `src/lib/deps.ts` · `imports.ts` | Install undeclared packages; add forgotten component imports. |
-| `src/lib/settings.ts` | Settings, persisted by the main process. |
+| `scripts/kits.mjs` | Bundles every kit package (React 19, Radix, Headless UI, MUI, Mantine, lucide, motion…) as shared-chunk ESM into `public/kits`, with an import map and a manifest of every export. |
+| `kits/` | The canvas (`stage.html`, `stage.js`), the shadcn/ui sources and the Tailwind theme. |
+| `src/lib/compile.ts` | Adds forgotten imports, maps icon names onto lucide, rewrites deep imports, rejects what isn't installed with a message the model can act on, then transpiles with sucrase. |
+| `src/lib/systemPrompt.ts` · `kits.ts` | The brief: base rules, the kit's API notes, and the size of what's being built. Follow-ups are stateless: current code plus earlier requests. |
+| `src/lib/library.ts` | Components, versions and conversations, in `library.json`. |
+| `src/lib/llm.ts` · `parser.ts` | Streaming client; pulls `<plan>`, `<file>` and `<review>` out of the stream as it arrives. |
 
 Two details that matter:
 
-1. **Cross-origin isolation.** WebContainer needs `SharedArrayBuffer`, so the page is
-   served with `COOP: same-origin` and `COEP: require-corp`.
+1. **The canvas is sandboxed.** Generated code runs in an iframe with only `allow-scripts
+   allow-forms`, so it has an opaque origin: it can't reach the app, its storage or the
+   model bridge. The kit bundles are served with CORS so it can still import them.
 2. **The model is proxied.** `/llm/*` → `127.0.0.1:8757/v1/*`, in both the dev server and
-   the packaged app, which keeps requests same-origin under cross-origin isolation.
+   the packaged app, which keeps requests same-origin.
 
-The model's output format is full files every time, never diffs:
+The model's output format:
 
 ```
-<file path="src/App.jsx">
-export default function App() { return <h1>Hi</h1> }
+<plan>
+- Anatomy: trigger, panel, search field, list
+</plan>
+<file path="SearchableSelect.jsx">
+export function SearchableSelect(props) { … }
+export default function Preview() { return <SearchableSelect … /> }
+export const variants = { Empty: () => <SearchableSelect items={[]} /> }
 </file>
-
-<install>recharts date-fns</install>
 ```
 
 </details>
@@ -216,8 +235,9 @@ request through the model's own template, so it works for any model that support
 If a model ever degenerates into one repeated character, generation stops with a clear
 error instead of streaming noise.
 
-In the app, the stream is parsed every 70 ms instead of per token, panes are memoized,
-terminal writes are batched and vendor code is split out. The app's own bundle is 59 kB.
+In the app, the stream is parsed every 70 ms instead of per token and panes are memoized.
+A component renders as soon as its file closes: compiling takes a few milliseconds and the
+canvas imports it in tens, because every kit is already bundled and loaded.
 
 </details>
 
@@ -276,8 +296,8 @@ from `/docs`. To move to a newer llama.cpp, bump `BUILD` in `electron/runtime.cj
 <br/>
 
 - Speed figures are estimates from the bandwidth model (±20%); the ranking is the reliable part.
-- One sandbox per window, and projects aren't saved between sessions yet.
-- Follow-ups rewrite whole files rather than patching them.
-- A 14B model occasionally breaks the output format; the error comes with a one-click repair pass.
+- Only the bundled packages are available on the canvas; anything else is reported with a suggestion instead.
+- Follow-ups rewrite the whole file rather than patching it.
+- A 14B model occasionally breaks the output format or the code; the error comes with a one-click fix pass.
 
 </details>

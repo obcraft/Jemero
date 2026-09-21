@@ -4,6 +4,8 @@ node_modules/
 # Build output: `npm run build` / `npm run dist` regenerate these
 dist/
 release/
+# The canvas's kit bundles (7 MB), rebuilt by `npm run kits` from kits/
+public/kits/
 *.tsbuildinfo
 .vite/
 

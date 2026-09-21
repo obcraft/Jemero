@@ -1,6 +1,6 @@
-// Production server for the packaged app: serves the built dist/ with the
-// cross-origin isolation headers WebContainer needs, and proxies /llm to the
-// local model, the same two things vite.config.ts does in development.
+// Production server for the packaged app: serves the built dist/, including the
+// canvas and its kit bundles under /kits, and proxies /llm to the local model,
+// the same things vite.config.ts does in development.
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -60,18 +60,17 @@ function startServer(root) {
       return
     }
 
+    // The canvas runs in a sandboxed iframe with an opaque origin, so to it the
+    // kit bundles are cross-origin, and module scripts need CORS to load.
+    const kits = rel.startsWith('kits/')
+
     fs.readFile(file, (err, data) => {
       const send = (buf, type) =>
-        res
-          .writeHead(200, {
-            'content-type': type,
-            // WebContainer needs SharedArrayBuffer, which needs this.
-            'cross-origin-opener-policy': 'same-origin',
-            'cross-origin-embedder-policy': 'require-corp',
-          })
-          .end(buf)
+        res.writeHead(200, { 'content-type': type, ...(kits ? { 'access-control-allow-origin': '*' } : {}) }).end(buf)
 
       if (err) {
+        // A missing module must fail as a 404, not come back as the app's HTML.
+        if (kits) return res.writeHead(404).end()
         // SPA fallback
         fs.readFile(path.join(root, 'index.html'), (e2, html) =>
           e2 ? res.writeHead(404).end() : send(html, TYPES['.html']),

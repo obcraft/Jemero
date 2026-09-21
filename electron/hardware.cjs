@@ -83,10 +83,11 @@ function probe() {
   const cores = gpuCores()
   const bandwidth = appleSilicon ? bandwidthFor(family, variant, cores) || 100 : 50
 
-  // Everything that is *not* the model: Chromium, the WebContainer sandbox and
-  // its npm install, Vite, and the OS itself. Measured at ~5-6 GB with a
-  // project booted, and it scales a little on bigger machines because macOS
-  // caches more. Under-reserving here is what makes a Mac swap mid-generation.
+  // Everything that is *not* the model: Chromium (the app and its canvas), Vite
+  // in development, and the OS itself. Measured at ~5-6 GB when the app still
+  // ran a WebContainer sandbox; the canvas needs far less, but the reserve
+  // stays, since under-reserving is what makes a Mac swap mid-generation. It
+  // scales a little on bigger machines because macOS caches more.
   const hostReserve = Math.max(6 * GB, Math.round(ramBytes * 0.22))
   const wired = wiredLimitBytes(ramBytes)
   // The wired pool isn't ours alone: WindowServer and Chromium's GPU process

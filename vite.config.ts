@@ -1,36 +1,44 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // The built-in llama.cpp server (electron/model.cjs) speaks the OpenAI API on
 // 127.0.0.1:8757, override with JEMERO_URL.
 const ATOMIC = process.env.JEMERO_URL ?? 'http://127.0.0.1:8757'
 
+/**
+ * The canvas (public/kits/stage.html) runs in a sandboxed iframe with an opaque
+ * origin, so to it the kit bundles are cross-origin, and module scripts need
+ * CORS to load. electron/serve.cjs does the same in the packaged app.
+ */
+const kitsCors = (): Plugin => ({
+  name: 'jemero-kits-cors',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (req.url?.startsWith('/kits/')) res.setHeader('Access-Control-Allow-Origin', '*')
+      next()
+    })
+  },
+})
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), kitsCors()],
   build: {
     rollupOptions: {
       output: {
-        // xterm and the WebContainer client are only needed once the workspace
-        // is in use; splitting them keeps the first paint (header + composer)
-        // on a much smaller chunk.
+        // The compiler is only needed once there's a component to render;
+        // splitting it keeps the first paint on a smaller chunk.
         manualChunks: {
-          react: ['react', 'react-dom'],
-          xterm: ['@xterm/xterm', '@xterm/addon-fit'],
-          webcontainer: ['@webcontainer/api'],
+          react: ['react', 'react-dom', 'react-dom/client'],
+          compiler: ['sucrase'],
         },
       },
     },
   },
   server: {
     port: 5273,
-    headers: {
-      // WebContainer needs SharedArrayBuffer, which needs cross-origin isolation.
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
     proxy: {
-      // Same-origin proxy: avoids CORS *and* the COEP restrictions that
-      // cross-origin isolation would otherwise impose on calls to the model server.
+      // Same-origin proxy: the page never has to make a cross-origin call to
+      // the model server.
       '/llm': {
         target: ATOMIC,
         changeOrigin: true,
