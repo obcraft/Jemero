@@ -9,11 +9,11 @@ Local · Offline · Free
 
 <br/>
 
-[![Download for Mac](https://img.shields.io/badge/Download_for_Mac-Apple_Silicon-5a48e8?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/obcraft/jemero/releases/latest/download/Jemero-arm64.dmg)
+[![Download for Mac](https://img.shields.io/badge/Download_for_Mac-Apple_Silicon-5a48e8?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/obcraft/Jemero/releases/latest/download/Jemero-arm64.dmg)
 &nbsp;
-[![Website](https://img.shields.io/badge/Website-obcraft.github.io/jemero-111827?style=for-the-badge)](https://obcraft.github.io/jemero/)
+[![Website](https://img.shields.io/badge/Website-obcraft.github.io/Jemero-111827?style=for-the-badge)](https://obcraft.github.io/Jemero/)
 
-[![Latest release](https://img.shields.io/github/v/release/obcraft/jemero?color=5a48e8&label=release)](https://github.com/obcraft/jemero/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/obcraft/Jemero?color=5a48e8&label=release)](https://github.com/obcraft/Jemero/releases/latest)
 ![macOS 13+](https://img.shields.io/badge/macOS-13%2B-111827?logo=apple&logoColor=white)
 ![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-M1_→_M5-111827)
 ![Runs offline](https://img.shields.io/badge/runs-100%25_offline-3fb950)
@@ -43,7 +43,7 @@ plain words. No cloud, no account, no API key, nothing to set up.
 
 ## Install
 
-1. **[Download Jemero-arm64.dmg](https://github.com/obcraft/jemero/releases/latest/download/Jemero-arm64.dmg)**, open it, and drag Jemero into **Applications**.
+1. **[Download Jemero-arm64.dmg](https://github.com/obcraft/Jemero/releases/latest/download/Jemero-arm64.dmg)**, open it, and drag Jemero into **Applications**.
 2. Open Jemero. The first time, macOS asks once: go to **System Settings → Privacy & Security** and click **Open Anyway**.
 3. The model list opens with the best model for your Mac marked **Best**. Click **Get** — it downloads, starts, and drops you straight into the chat.
 
@@ -129,7 +129,7 @@ install in parallel; the preview hot-reloads on every follow-up.
 ## Development
 
 ```bash
-git clone https://github.com/obcraft/jemero.git && cd jemero
+git clone https://github.com/obcraft/Jemero.git && cd Jemero
 npm install
 npm start          # the app, with hot reload
 npm run dist       # → release/Jemero-arm64.dmg

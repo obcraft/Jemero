@@ -38,7 +38,7 @@ module.exports = {
     notarize,
   },
   // A stable name, so the landing page's "latest release" link never changes:
-  // github.com/obcraft/jemero/releases/latest/download/Jemero-arm64.dmg
+  // github.com/obcraft/Jemero/releases/latest/download/Jemero-arm64.dmg
   artifactName: '${productName}-${arch}.${ext}',
   dmg: {
     title: 'Jemero',
