@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build output — `npm run build` / `npm run dist` regenerate these
+dist/
+release/
+*.tsbuildinfo
+.vite/
+
+# The llama.cpp runtime is a 24 MB third-party binary: fetched, not committed.
+# `npm run runtime` vendors it; `npm run dist` does so automatically if missing.
+vendor/
+
+# Model weights and partial downloads, should any end up in the tree
+*.gguf
+*.gguf.part
+*.part
+
+# Icon build scratch (build/icon.icns and build/icon.png are committed)
+build/icon.iconset
+
+# Logs and debug output
+*.log
+npm-debug.log*
+logs/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.provisionprofile
+
+# Editors, OS and local tool state
+.DS_Store
+.vscode/
+.idea/
+*.swp
+.kilo/
+.claude/settings.local.json

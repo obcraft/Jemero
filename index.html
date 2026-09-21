@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atomic Lovable</title>
+    <style>
+      /* Painted before the bundle runs, so the first frame isn't a white flash.
+         lib/settings.ts takes over once React mounts. */
+      html { background: #0b0d11; }
+      @media (prefers-color-scheme: light) { html { background: #f4f5f8; } }
+    </style>
+    <script>
+      // Read the stored theme early for the same reason.
+      try {
+        var s = JSON.parse(localStorage.getItem('atomic.settings.v1') || '{}')
+        var t = s.theme === 'light' || s.theme === 'dark'
+          ? s.theme
+          : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+        document.documentElement.dataset.theme = t
+        document.documentElement.style.background = t === 'light' ? '#f4f5f8' : '#0b0d11'
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
