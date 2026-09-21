@@ -30,6 +30,11 @@ export default function Modal({
   const [shown, setShown] = useState(false)
   const panel = useRef<HTMLDivElement>(null)
   const restoreFocus = useRef<Element | null>(null)
+  // Read through a ref: the parent's onClose is a new function every render,
+  // and as an effect dependency it re-ran the focus handling below each time —
+  // yanking focus out of whatever input was being typed in.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
     if (open) {
@@ -52,7 +57,7 @@ export default function Modal({
       if (e.key !== 'Escape') return
       // Don't let the app's global Esc-to-stop fire as well.
       e.stopPropagation()
-      onClose()
+      onCloseRef.current()
     }
     // Capture phase: this runs before App's window listener.
     window.addEventListener('keydown', onKey, true)
@@ -63,7 +68,7 @@ export default function Modal({
       document.body.style.overflow = overflow
       if (restoreFocus.current instanceof HTMLElement) restoreFocus.current.focus()
     }
-  }, [mounted, onClose])
+  }, [mounted])
 
   if (!mounted) return null
 

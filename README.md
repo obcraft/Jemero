@@ -160,17 +160,34 @@ export default function App() { return <h1>Hi</h1> }
 Full contents every time — no diffs, no "rest unchanged". `parser.ts` is forgiving
 about stray markdown fences and single quotes, because small models produce both.
 
+## Install (as a user)
+
+1. Download `Atomic Lovable-<version>-arm64.dmg`, open it, drag the app to **Applications**.
+2. Open it. First launch of an ad-hoc signed build: macOS blocks it once — go to
+   **System Settings → Privacy & Security → Open Anyway**. (A Developer ID build, below,
+   skips this entirely.)
+3. The model list opens on its own, with the best model for your Mac marked **Best**.
+   Click **Get**: it downloads, is checked against Hugging Face's SHA-256, starts, and
+   drops you in the chat — one click, no other app needed.
+
 ## Packaging
 
 ```bash
-npm run dist     # → release/Atomic Lovable-0.1.0-arm64.dmg  (~106 MB)
+npm run dist     # → release/Atomic Lovable-0.1.0-arm64.dmg  (~107 MB)
 ```
 
-The app carries `llama-server` and its Metal libraries in `Contents/Resources/llama` —
-a fresh Mac needs nothing but a model download. The runtime isn't committed to the repo
-(`vendor/` is ignored); `npm run dist` fetches it on a fresh clone. Unsigned: first launch wants
-right-click → Open, or `xattr -d com.apple.quarantine "/Applications/Atomic Lovable.app"`.
-To sign, drop `"identity": null` from `build.mac`; the nested runtime is signed with it.
+The app carries `llama-server` and its Metal libraries in `Contents/Resources/llama`,
+so a fresh Mac needs nothing but a model download. The runtime isn't committed
+(`vendor/` is ignored); `npm run dist` fetches it on a fresh clone. Config lives in
+`electron-builder.config.cjs`, which picks the signing mode from the environment:
+
+| mode | when | what the user gets |
+|---|---|---|
+| **ad-hoc** (default) | no certificate present | a valid, sealed bundle; macOS asks once via *Open Anyway* |
+| **Developer ID + notarized** | `CSC_NAME` (or `CSC_LINK`) plus `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` | opens with no warning, like Atomic Chat |
+
+The Developer ID mode needs a paid Apple Developer account. It enables the hardened
+runtime with the entitlements in `build/entitlements.mac.plist`.
 
 To move to a newer llama.cpp, bump `BUILD` in `electron/runtime.cjs` and run
 `npm run runtime`.

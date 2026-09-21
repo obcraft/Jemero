@@ -500,11 +500,11 @@ export default function App() {
                 )}
                 {!serverOk && !serverLoading && (
                   <p className="warn">
-                    No local model is answering ({serverStatus}).{' '}
-                    <button className="link" onClick={() => setBrowserOpen(true)}>
-                      Pick the right one for this Mac
+                    No model is running yet.{' '}
+                    <button className="link" onClick={() => setBrowserOpen(true)} title={serverStatus}>
+                      Pick one for this Mac
                     </button>{' '}
-                    — it gets downloaded and started for you.
+                    — it downloads and starts by itself.
                   </p>
                 )}
               </div>

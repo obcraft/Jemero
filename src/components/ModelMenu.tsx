@@ -33,6 +33,12 @@ export default function ModelMenu({
   const [status, setStatus] = useState<{ id: string; text: string } | null>(null)
   const menu = useRef<HTMLDivElement>(null)
   const sync = useCallback(() => setSnap(cachedSnapshot()), [])
+  // Fresh closures from the parent every render — read through refs so the
+  // subscriptions below are made once, not on every app re-render.
+  const onActiveRef = useRef(onActive)
+  const onCloseRef = useRef(onClose)
+  onActiveRef.current = onActive
+  onCloseRef.current = onClose
 
   useEffect(() => {
     void loadSnapshot()
@@ -41,8 +47,8 @@ export default function ModelMenu({
       if (p.phase === 'activating') setStatus({ id: p.id, text: p.message ?? 'Starting…' })
       if (p.phase === 'active') {
         setStatus(null)
-        onActive(p.id)
-        onClose()
+        onActiveRef.current(p.id)
+        onCloseRef.current()
       }
       if (p.phase === 'error') setStatus(null)
     })
@@ -50,19 +56,19 @@ export default function ModelMenu({
       stopWatch()
       stopProgress?.()
     }
-  }, [sync, onActive, onClose])
+  }, [sync])
 
   // Dismiss on outside click or Esc, ignoring the button that opened us.
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       const target = e.target as Node
       if (menu.current?.contains(target) || anchorRef.current?.contains(target)) return
-      onClose()
+      onCloseRef.current()
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.stopPropagation()
-      onClose()
+      onCloseRef.current()
     }
     window.addEventListener('mousedown', onDown)
     window.addEventListener('keydown', onKey, true)
@@ -70,7 +76,7 @@ export default function ModelMenu({
       window.removeEventListener('mousedown', onDown)
       window.removeEventListener('keydown', onKey, true)
     }
-  }, [anchorRef, onClose])
+  }, [anchorRef])
 
   const ready = (snap?.installed ?? []).filter((m) => m.complete)
   const plans = new Map((snap?.models ?? []).map((m) => [m.modelId, m]))

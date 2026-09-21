@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Modal from './Modal'
 import {
   available,
@@ -47,6 +47,18 @@ export default function ModelBrowser({
 
   const sync = useCallback(() => setSnap(cachedSnapshot()), [])
 
+  // Downloads started from here are downloads the user wants to *use*: when
+  // one finishes, start it and close this panel, so Get lands in the chat.
+  const useWhenReady = useRef(new Set<string>())
+
+  // The parent passes fresh closures every render; reading them through refs
+  // keeps the subscription below from re-running (and re-reading the catalog
+  // from disk) each time the app re-renders.
+  const onActiveRef = useRef(onActive)
+  const onCloseRef = useRef(onClose)
+  onActiveRef.current = onActive
+  onCloseRef.current = onClose
+
   useEffect(() => {
     if (!open) return
     void loadSnapshot(true)
@@ -54,13 +66,19 @@ export default function ModelBrowser({
     const stopProgress = bridge()?.onProgress((p) => {
       setProgress((prev) => ({ ...prev, [p.id]: p }))
       if (p.phase === 'error' && p.message) setError(p.message)
-      if (p.phase === 'active') onActive(p.id)
+      if (p.phase === 'done' && useWhenReady.current.delete(p.id)) {
+        void bridge()?.activate(p.id).then((r) => r && !r.ok && r.reason && setError(r.reason))
+      }
+      if (p.phase === 'active') {
+        onActiveRef.current(p.id)
+        onCloseRef.current()
+      }
     })
     return () => {
       stopWatch()
       stopProgress?.()
     }
-  }, [open, sync, onActive])
+  }, [open, sync])
 
   const downloaded = useMemo(
     () => new Set((snap?.installed ?? []).filter((m) => m.complete).map((m) => m.id)),
@@ -135,7 +153,10 @@ export default function ModelBrowser({
                 downloaded={downloaded.has(m.modelId)}
                 partial={partial.has(m.modelId)}
                 progress={progress[m.modelId]}
-                onGet={() => run(() => bridge()?.install(m.modelId))}
+                onGet={() => {
+                  useWhenReady.current.add(m.modelId)
+                  return run(() => bridge()?.install(m.modelId))
+                }}
                 onUse={() => run(() => bridge()?.activate(m.modelId))}
                 onCancel={() => void bridge()?.cancelInstall(m.modelId)}
                 onDelete={() => run(() => bridge()?.remove(m.modelId)).then(() => loadSnapshot(true))}
