@@ -2,7 +2,7 @@
   "name": "jemero",
   "productName": "Jemero",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "start": "node scripts/kits.mjs --if-stale && node scripts/dev-name.mjs && electron .",
