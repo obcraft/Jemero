@@ -1,10 +1,11 @@
 {
   "name": "jemero",
+  "productName": "Jemero",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "start": "node scripts/kits.mjs --if-stale && electron .",
+    "start": "node scripts/kits.mjs --if-stale && node scripts/dev-name.mjs && electron .",
     "web": "node scripts/kits.mjs --if-stale && vite",
     "kits": "node scripts/kits.mjs",
     "models": "node scripts/models.mjs",

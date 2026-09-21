@@ -254,6 +254,9 @@ function registerModelIpc() {
 }
 
 async function bootstrap() {
+  // In development the Dock would show Electron's own icon (the name is fixed
+  // by scripts/dev-name.mjs); the packaged app carries ours in its bundle.
+  if (isDev && process.platform === 'darwin') app.dock.setIcon(path.join(__dirname, '..', 'build', 'icon.png'))
   buildMenu()
   registerStoreIpc('settings', { pretty: true })
   registerStoreIpc('library')
