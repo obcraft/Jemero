@@ -1,85 +1,170 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { listModels, ping, streamChat, trimHistory, type ChatMessage } from './lib/llm'
-import { parseArtifacts } from './lib/parser'
-import { BASE_DEPS, missingDeps } from './lib/deps'
-import { fixMissingImports } from './lib/imports'
-import { SYSTEM_PROMPT, buildUserTurn } from './lib/systemPrompt'
-import { LOCKED_PATHS, TEMPLATE } from './lib/template'
+import { listModels, ping, streamChat } from './lib/llm'
+import { parseArtifacts, type ParsedFile } from './lib/parser'
+import { compile, isScript, pickEntry, type Compiled } from './lib/compile'
+import { kitById, loadManifest, type KitId, type Manifest } from './lib/kits'
+import {
+  addTurn,
+  addVersion,
+  createItem,
+  deleteItem,
+  displayName,
+  findItem,
+  getLibrary,
+  provisionalName,
+  updateItem,
+  useLibrary,
+  type Kind,
+  type Mode,
+  type Version,
+} from './lib/library'
+import { buildRequest, buildSystem, portRequest, refineRequest, repairRequest, reviewRequest } from './lib/systemPrompt'
 import { modelLabel, setPriority, startSnapshotSync } from './lib/models'
 import {
   applyAppearance,
   effectivePrompt,
   maxTokensFor,
-  memoryCharsFor,
+  setSettings,
+  useResolvedTheme,
   useSettings,
+  type CanvasBg,
+  type CanvasTheme,
+  type CanvasWidth,
 } from './lib/settings'
-import {
-  getContainer,
-  installPackages,
-  mountTemplate,
-  startDevServer,
-  writeFiles,
-} from './lib/webcontainer'
 import ModelBrowser from './components/ModelBrowser'
 import ModelMenu from './components/ModelMenu'
+import KitMenu from './components/KitMenu'
 import SettingsPanel from './components/SettingsPanel'
-import TerminalView from './components/Terminal'
+import Library from './components/Library'
+import Conversation, { type Draft } from './components/Conversation'
+import Stage, { type StageCode, type StageEvent } from './components/Stage'
 import CodeView from './components/CodeView'
-import Preview from './components/Preview'
+import ConsoleView, { type ConsoleEntry, type ConsoleLevel } from './components/ConsoleView'
 
-type Phase = 'idle' | 'thinking' | 'writing' | 'installing' | 'booting' | 'ready' | 'error'
-type Turn = { role: 'user' | 'assistant'; text: string }
+type Phase = 'idle' | 'thinking' | 'planning' | 'writing' | 'reviewing'
+type Tab = 'canvas' | 'code' | 'console'
 
-/**
- * "Failed to resolve import \"x\"" means the model used a package it never
- * declared. That's a build-system problem, not a creative one, resolve the bare
- * specifier to a package name and install it rather than round-tripping the model.
- */
-function missingPackage(err: string): string | null {
-  const m = err.match(/Failed to resolve import ["']([^"']+)["']/)
-  if (!m) return null
-  const spec = m[1]
-  if (spec.startsWith('.') || spec.startsWith('/')) return null
-  const parts = spec.split('/')
-  return spec.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
+const PHASE_LABEL: Record<Exclude<Phase, 'idle'>, string> = {
+  thinking: 'Thinking…',
+  planning: 'Planning…',
+  writing: 'Writing the code…',
+  reviewing: 'Reviewing…',
 }
-
-/** Logs are unbounded otherwise: a long install plus Vite output adds up. */
-const MAX_LOG_LINES = 4000
 
 /** Re-parsing the whole stream on every token is O(n²); 70 ms still feels live. */
 const PARSE_INTERVAL_MS = 70
 
-const TABS = ['preview', 'code', 'terminal'] as const
+/** Console lines kept; a chatty component can log thousands. */
+const MAX_CONSOLE = 500
 
 /**
  * A broken model or quantization degenerates into one repeated character
  * ("@@@@@@…", "GGGG…"). No real code has 48 identical non-space characters in
- * a row (a long "=====" divider tops out well below that), so seeing it means
- * stop now rather than stream 4k tokens of noise.
+ * a row, so seeing it means stop now rather than stream 4k tokens of noise.
  */
 const DEGENERATE = /([^\s])\1{47,}$/
 
-const PHASE_LABEL: Record<Phase, string> = {
-  idle: 'Idle',
-  thinking: 'Model is thinking…',
-  writing: 'Writing files…',
-  installing: 'Installing packages…',
-  booting: 'Starting dev server…',
-  ready: 'Ready',
-  error: 'Error',
+const TABS: Tab[] = ['canvas', 'code', 'console']
+
+const EXAMPLES: Record<Kind, string[]> = {
+  component: [
+    'Searchable select: each option shows an icon, a name and a chevron; a search field on top filters the list live',
+    'Date range picker with presets like “Last 7 days” and a two-month calendar',
+    'OTP input with 6 boxes, paste support, auto-advance and an error state',
+    'Tag input: type and press Enter to add chips, Backspace removes the last one',
+  ],
+  block: [
+    'Sign-in card with email, password with show/hide, remember me and social buttons',
+    'Notification settings panel with grouped switches and a sticky save bar',
+    'Pricing card with a monthly/yearly toggle and a feature checklist',
+    'Data table with search, sortable columns, row selection and pagination',
+  ],
+  section: [
+    'SaaS hero: headline, subtext, email capture and a product screenshot placeholder',
+    'Three-tier pricing section with the middle plan highlighted',
+    'Feature grid with six icon cards and a short intro',
+    'Footer with four link columns, a newsletter signup and social links',
+  ],
 }
 
-/** Keyed on the phase so each change crossfades instead of snapping. */
-function PhaseLine({ phase }: { phase: Phase }) {
+const REFINE_CHIPS: Record<Kind, string[]> = {
+  component: ['Keyboard navigation', 'Empty, loading and error states', 'More compact', 'Polish the visual design'],
+  block: ['Validation and error states', 'Responsive down to phones', 'Polish spacing and hierarchy'],
+  section: ['Responsive down to phones', 'Stronger visual hierarchy', 'Subtle entrance motion'],
+}
+
+const ERROR_TITLE: Record<string, string> = {
+  import: 'Could not load the component',
+  render: 'The component crashed while rendering',
+  runtime: 'Error while using the component',
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/**
+ * A version's files after the model rewrote some of them. A component the
+ * model renamed replaces the old entry file rather than lingering next to it.
+ */
+function mergeOutput(base: Version | null, written: ParsedFile[]): { files: Record<string, string>; entry: string } | null {
+  const files = { ...(base?.files ?? {}) }
+  for (const f of written) files[f.path] = f.content
+  const paths = written.map((f) => f.path)
+  let entry =
+    base && paths.includes(base.entry)
+      ? base.entry
+      : (paths.find((p) => isScript(p) && /\bexport\s+default\b/.test(files[p])) ?? null)
+  if (base && entry && entry !== base.entry && !paths.includes(base.entry)) {
+    const stem = base.entry.replace(/\.[^.]+$/, '').split('/').pop() ?? ''
+    const imported = Object.entries(files).some(([p, c]) => p !== base.entry && new RegExp(`from\\s*['"]\\./${escapeRe(stem)}`).test(c))
+    if (!imported) delete files[base.entry]
+  }
+  entry ??= pickEntry(files, base?.entry)
+  return entry ? { files, entry } : null
+}
+
+/** The shadcn sources a component uses, with what they use in turn, for the code tab. */
+function kitSourcesFor(files: Record<string, string>, manifest: Manifest | null): Record<string, string> {
+  if (!manifest) return {}
+  const out: Record<string, string> = {}
+  const queue = [Object.values(files).join('\n')]
+  while (queue.length) {
+    const src = queue.pop()!
+    for (const m of src.matchAll(/['"]@\/components\/ui\/([\w-]+)['"]/g)) {
+      const p = `components/ui/${m[1]}.jsx`
+      if (manifest.sources[p] && !out[p]) {
+        out[p] = manifest.sources[p]
+        queue.push(out[p])
+      }
+    }
+    if (/['"]@\/lib\/utils['"]/.test(src) && manifest.sources['lib/utils.js']) out['lib/utils.js'] = manifest.sources['lib/utils.js']
+  }
+  return out
+}
+
+function Icon({ d, size = 14 }: { d: string; size?: number }) {
   return (
-    <span key={phase} className="phase-text">
-      {PHASE_LABEL[phase]}
-    </span>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={d} />
+    </svg>
   )
 }
 
+const WIDTHS: { id: CanvasWidth; label: string; icon: string }[] = [
+  { id: 'fit', label: 'Fit the pane', icon: 'M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3' },
+  { id: '375', label: 'Phone, 375px', icon: 'M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2' },
+  { id: '768', label: 'Tablet, 768px', icon: 'M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zM11 18h2' },
+  { id: '1280', label: 'Desktop, 1280px', icon: 'M4 4h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM8 20h8M12 16v4' },
+]
+
+const NEXT_BG: Record<CanvasBg, CanvasBg> = { dots: 'grid', grid: 'plain', plain: 'dots' }
+const NEXT_THEME: Record<CanvasTheme, CanvasTheme> = { app: 'light', light: 'dark', dark: 'app' }
+
 export default function App() {
+  const settings = useSettings()
+  const appTheme = useResolvedTheme()
+  const library = useLibrary()
+
+  // --- model server ------------------------------------------------------
   const [model, setModel] = useState('')
   const [serverStatus, setServerStatus] = useState('starting the model server…')
   const [serverLoading, setServerLoading] = useState(true)
@@ -89,33 +174,52 @@ export default function App() {
   const [browserOpen, setBrowserOpen] = useState(() => window.location.hash === '#models')
   const [settingsOpen, setSettingsOpen] = useState(() => window.location.hash === '#settings')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [kitMenuOpen, setKitMenuOpen] = useState(false)
   const modelBtn = useRef<HTMLButtonElement>(null)
-  const settings = useSettings()
+  const kitBtn = useRef<HTMLButtonElement>(null)
 
+  // --- kits --------------------------------------------------------------
+  const [manifest, setManifest] = useState<Manifest | null>(null)
+  const [manifestError, setManifestError] = useState<string | null>(null)
+
+  // --- library & generation ---------------------------------------------
+  const [selectedId, setSelectedId] = useState<string | null>(() => getLibrary().items[0]?.id ?? null)
+  /** Version on the canvas per item (1-based); missing means the latest. */
+  const [viewed, setViewed] = useState<Record<string, number>>({})
+  const [newKind, setNewKind] = useState<Kind>('component')
   const [prompt, setPrompt] = useState('')
-  const [turns, setTurns] = useState<Turn[]>([])
-  const [thought, setThought] = useState('')
   const [phase, setPhase] = useState<Phase>('idle')
-  const [error, setError] = useState<string | null>(null)
-
-  const [files, setFiles] = useState<Record<string, string>>({ ...TEMPLATE })
-  const [logs, setLogs] = useState<string[]>([])
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [buildError, setBuildError] = useState<string | null>(null)
-  const [reloadKey, setReloadKey] = useState(0)
-  const [tab, setTab] = useState<'preview' | 'code' | 'terminal'>('terminal')
-
-  const history = useRef<ChatMessage[]>([{ role: 'system', content: SYSTEM_PROMPT }])
-  const warmup = useRef<Promise<void> | null>(null)
-  const devStarted = useRef(false)
+  const [draft, setDraft] = useState<Draft | null>(null)
+  /** Every file the model has started, for the code tab. */
+  const [draftFiles, setDraftFiles] = useState<{ itemId: string; files: ParsedFile[] } | null>(null)
+  /** Only the finished ones, for the canvas: it renders as soon as a file closes. */
+  const [draftDone, setDraftDone] = useState<{ itemId: string; files: ParsedFile[]; kit: KitId } | null>(null)
+  const [thought, setThought] = useState('')
   const abort = useRef<AbortController | null>(null)
-  const autoInstalled = useRef<Set<string>>(new Set())
-  const installed = useRef<Set<string>>(new Set(BASE_DEPS))
+  const running = useRef<{ itemId: string; mode: Mode } | null>(null)
+  const composer = useRef<HTMLTextAreaElement>(null)
 
-  const log = useCallback(
-    (line: string) => setLogs((l) => (l.length > MAX_LOG_LINES ? [...l.slice(-MAX_LOG_LINES / 2), line] : [...l, line])),
-    [],
-  )
+  // --- workspace ---------------------------------------------------------
+  const [tab, setTab] = useState<Tab>('canvas')
+  const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([])
+  const [stageError, setStageError] = useState<{ kind: string; message: string; detail: string } | null>(null)
+  const [variants, setVariants] = useState<string[]>([])
+  const [variant, setVariant] = useState<string | null>(null)
+  const [renderMs, setRenderMs] = useState<number | null>(null)
+  const [resetKey, setResetKey] = useState(0)
+  const nextLogId = useRef(1)
+
+  const item = library.items.find((i) => i.id === selectedId) ?? null
+  const viewedN = item ? Math.min(viewed[item.id] ?? item.versions.length, item.versions.length) : 0
+  const version = item && viewedN > 0 ? item.versions[viewedN - 1] : null
+  const busy = phase !== 'idle'
+
+  const log = useCallback((level: ConsoleLevel, text: string) => {
+    setConsoleEntries((list) => {
+      const entry = { id: nextLogId.current++, level, text, at: Date.now() }
+      return list.length >= MAX_CONSOLE ? [...list.slice(-(MAX_CONSOLE - 100)), entry] : [...list, entry]
+    })
+  }, [])
 
   // Theme and motion live on <html>, so the CSS can switch without a re-render.
   useEffect(() => applyAppearance(settings), [settings])
@@ -124,6 +228,10 @@ export default function App() {
   // menu and the browser.
   useEffect(() => startSnapshotSync(), [])
   useEffect(() => setPriority(settings.modelPriority), [settings.modelPriority])
+
+  useEffect(() => {
+    loadManifest().then(setManifest, (e: Error) => setManifestError(e.message))
+  }, [])
 
   // ⌘L and ⌘, from the macOS menu bar.
   useEffect(
@@ -166,210 +274,258 @@ export default function App() {
     }
   }, [])
 
-  /**
-   * Boot the sandbox and run the base `npm install` immediately, in parallel with
-   * the model's first generation, by the time tokens stop, deps are usually there.
-   */
-  const warmSandbox = useCallback(() => {
-    if (!warmup.current) {
-      warmup.current = (async () => {
-        const wc = await getContainer(log)
-        await mountTemplate(wc, log)
-        await installPackages(wc, [], log)
-      })().catch((e) => {
-        log(`✗ ${(e as Error).message}`)
-        throw e
-      })
-    }
-    return warmup.current
-  }, [log])
-
-  const submit = useCallback(async (override?: string) => {
-    const text = (override ?? prompt).trim()
-    if (!text || !model || phase === 'thinking' || phase === 'writing') return
-
-    setPrompt('')
-    setError(null)
-    setBuildError(null)
-    setThought('')
-    setTurns((t) => [...t, { role: 'user', text }, { role: 'assistant', text: '' }])
-    setPhase('thinking')
-    if (settings.autoSwitchTabs) setTab('code')
-
-    const warming = warmSandbox()
-
-    const generated = Object.keys(files).filter((p) => !(p in TEMPLATE))
-    const isFirst = history.current.length === 1
-    // A prompt edited in Settings applies to the next conversation, not to one
-    // already under way, swapping it mid-thread would contradict the history
-    // the model has already been shown.
-    if (isFirst) history.current[0] = { role: 'system', content: effectivePrompt(settings) }
-    history.current.push({
-      role: 'user',
-      content: buildUserTurn(text, [...Object.keys(TEMPLATE), ...generated], isFirst),
-    })
-
-    abort.current?.abort()
-    const controller = new AbortController()
-    abort.current = controller
-
-    let raw = ''
-    // parseArtifacts re-reads the whole accumulated stream, so calling it per
-    // token is quadratic, on a five-file app that is thousands of passes over a
-    // growing string, and three setStates each time. Coalesce instead: parse on
-    // a fixed interval, and once more when the stream ends.
-    let lastParse = 0
-    let broken: Error | null = null
-    const flush = () => {
-      const parsed = parseArtifacts(raw)
-      if (parsed.files.length) setPhase('writing')
-      setTurns((t) => {
-        const last = t[t.length - 1]
-        if (last?.text === parsed.prose) return t
-        const next = [...t]
-        next[next.length - 1] = { role: 'assistant', text: parsed.prose }
-        return next
-      })
-      if (parsed.files.length) {
-        setFiles((prev) => {
-          let changed = false
-          const merged = { ...prev }
-          for (const f of parsed.files) {
-            if (merged[f.path] === f.content) continue
-            merged[f.path] = f.content
-            changed = true
-          }
-          return changed ? merged : prev
-        })
-      }
-    }
-
-    try {
-      await streamChat({
-        model,
-        messages: trimHistory(history.current, memoryCharsFor(settings)),
-        temperature: settings.temperature,
-        topP: settings.topP,
-        maxTokens: maxTokensFor(settings),
-        thinking: settings.thinking,
-        signal: controller.signal,
-        onThought: settings.showReasoning
-          ? (t) => setThought((prev) => (prev + t).slice(-4000))
-          : undefined,
-        onToken: (token) => {
-          raw += token
-          if (!broken && DEGENERATE.test(raw.slice(-64))) {
-            // Record first, then abort: the catch below treats a plain abort as
-            // the user pressing Stop and stays quiet, which would hide this.
-            broken = new Error(
-              `The model started repeating “${raw.slice(-1)}” endlessly. Its output is broken, not slow. ` +
-                'Switch to another model from the header; if this one keeps doing it, delete and re-download it.',
-            )
-            controller.abort()
-            return
-          }
-          const now = performance.now()
-          if (now - lastParse < PARSE_INTERVAL_MS) return
-          lastParse = now
-          flush()
-        },
-      })
-      flush()
-
-      if (broken) throw broken
-      if (controller.signal.aborted) return
-      const parsed = parseArtifacts(raw)
-      const written = parsed.files.filter((f) => f.complete)
-      if (!written.length) {
-        throw new Error(
-          'Model produced no complete <file> blocks. Try a more capable model or rephrase the prompt.',
-        )
-      }
-      history.current.push({ role: 'assistant', content: raw })
-
-      setPhase('installing')
-      if (settings.autoSwitchTabs) setTab('terminal')
-      await warming
-      if (controller.signal.aborted) return
-      const wc = await getContainer(log)
-
-      // Repair design-system imports the model forgot, otherwise React renders a
-      // blank page and neither Vite nor we would report anything.
-      const repaired = written.map((f) => {
-        if (!settings.autoFixImports) return f
-        const { code, added } = fixMissingImports(f.path, f.content)
-        if (added.length) log(`  fixed imports in ${f.path}: ${added.join(', ')}`)
-        return { ...f, content: code }
-      })
-      setFiles((prev) => {
-        const merged = { ...prev }
-        for (const f of repaired) merged[f.path] = f.content
-        return merged
-      })
-
-      // The model's own <install> hints, plus anything it imported without asking.
-      const fileMap = Object.fromEntries(repaired.map((f) => [f.path, f.content]))
-      const needed = [
-        ...new Set([
-          ...parsed.installs.filter((p) => !installed.current.has(p)),
-          ...(settings.autoInstallDeps ? missingDeps(fileMap, installed.current) : []),
-        ]),
-      ]
-      if (needed.length) {
-        log(`↻ dependencies needed: ${needed.join(', ')}`)
-        const code = await installPackages(wc, needed, log)
-        if (code === 0) needed.forEach((p) => installed.current.add(p))
-        else log('✗ package install failed, preview may not build')
-      }
-
-      // Written after installing, so an HMR update never lands on a missing dep.
-      await writeFiles(wc, fileMap, log)
-
-      if (controller.signal.aborted) return
-      if (!devStarted.current) {
-        devStarted.current = true
-        setPhase('booting')
-        const url = await startDevServer(wc, log, setBuildError)
-        setPreviewUrl(url)
-      } else {
-        log('  HMR will pick up the changes')
-      }
-      setPhase('ready')
-      if (settings.autoSwitchTabs) setTab('preview')
-    } catch (e) {
-      if (controller.signal.aborted && !broken) return
-      const message = (broken ?? (e as Error)).message
-      setError(message)
-      log(`✗ ${message}`)
-      setPhase('error')
-    }
-  }, [prompt, model, phase, files, warmSandbox, log, settings])
-
-  // The sandbox posts render/runtime errors up; treat the payload as plain data.
+  // A different component starts with a clean canvas state and console.
   useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
-      const d = e.data as { __atomic?: boolean; kind?: string; message?: string } | null
-      if (!d || d.__atomic !== true || typeof d.message !== 'string') return
-      setBuildError(`${d.kind ?? 'Error'}: ${d.message}`)
+    setStageError(null)
+    setVariants([])
+    setVariant(null)
+    setRenderMs(null)
+    setConsoleEntries([])
+  }, [selectedId])
+
+  // --- what the canvas and the code tab show ------------------------------
+
+  const source = useMemo(() => {
+    if (!item) return null
+    if (draftDone && draftDone.itemId === item.id && draftDone.files.length) {
+      const merged = mergeOutput(version, draftDone.files)
+      if (merged) return { ...merged, kit: draftDone.kit }
     }
-    window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
-  }, [])
+    return version ? { files: version.files, entry: version.entry, kit: version.kit } : null
+  }, [item?.id, draftDone, version]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hand edits arrive per keystroke; compiling once typing pauses keeps a
+  // half-typed line from flashing an error on the canvas.
+  const editing = useRef(false)
+  const [compileInput, setCompileInput] = useState(source)
+  useEffect(() => {
+    if (!editing.current) return setCompileInput(source)
+    const id = setTimeout(() => {
+      editing.current = false
+      setCompileInput(source)
+    }, 280)
+    return () => clearTimeout(id)
+  }, [source])
+
+  const compiled = useMemo<Compiled | null>(
+    () =>
+      compileInput && manifest
+        ? compile(compileInput.files, compileInput.entry, compileInput.kit, manifest, { repair: settings.autoFixImports })
+        : null,
+    [compileInput, manifest, settings.autoFixImports],
+  )
+
+  // The canvas keeps showing the last version that compiled while the current
+  // one has an error, so there's always something to compare against.
+  const [shown, setShown] = useState<{ itemId: string; code: StageCode; kit: KitId } | null>(null)
+  useEffect(() => {
+    if (!compiled) return
+    for (const note of compiled.notes) log(note.level === 'warn' ? 'warn' : 'system', note.text)
+    if (!compiled.ok) {
+      log('error', compiled.error)
+      return
+    }
+    if (item && compileInput) setShown({ itemId: item.id, code: { entry: compiled.entry, modules: compiled.modules }, kit: compileInput.kit })
+  }, [compiled]) // eslint-disable-line react-hooks/exhaustive-deps
+  const stage = shown && item && shown.itemId === item.id ? shown : null
+
+  const codeFiles = useMemo(() => {
+    if (item && draftFiles && draftFiles.itemId === item.id && draftFiles.files.length) {
+      const files = { ...(version?.files ?? {}) }
+      for (const f of draftFiles.files) files[f.path] = f.content
+      return files
+    }
+    return version?.files ?? {}
+  }, [item?.id, draftFiles, version]) // eslint-disable-line react-hooks/exhaustive-deps
+  const kitFiles = useMemo(() => kitSourcesFor(codeFiles, manifest), [codeFiles, manifest])
+  const streamingPath = draftFiles && item && draftFiles.itemId === item.id ? (draftFiles.files.find((f) => !f.complete)?.path ?? null) : null
+
+  const onStageEvent = useCallback(
+    (e: StageEvent) => {
+      if (e.type === 'rendered') {
+        setStageError(null)
+        setVariants(e.variants)
+        setRenderMs(e.ms)
+        setVariant((v) => (v && v !== '*' && !e.variants.includes(v) ? null : v))
+        log('system', `Rendered in ${e.ms} ms`)
+      } else if (e.type === 'error') {
+        const detail = [e.message, e.componentStack?.trim().split('\n').slice(0, 6).join('\n')].filter(Boolean).join('\n')
+        setStageError({ kind: e.kind, message: e.message, detail })
+        log('error', `${ERROR_TITLE[e.kind] ?? 'Error'}: ${e.message}`)
+      } else {
+        log(e.level, e.text)
+      }
+    },
+    [log],
+  )
+
+  // --- generation ---------------------------------------------------------
+
+  const generate = useCallback(
+    async (requested: Mode, text: string, portKit?: KitId) => {
+      if (!model || !manifest || abort.current) return
+      let mode = requested
+      let target = mode === 'build' ? null : findItem(selectedId)
+      if (!target) {
+        target = createItem(newKind, provisionalName(text))
+        setSelectedId(target.id)
+        mode = 'build'
+      }
+      const n = Math.min(viewed[target.id] ?? target.versions.length, target.versions.length)
+      const base = n > 0 ? target.versions[n - 1] : null
+      // Nothing built yet (a first attempt failed): whatever was asked is the build.
+      if (!base) mode = 'build'
+
+      const kit: KitId = mode === 'port' && portKit ? portKit : (base?.kit ?? settings.kit)
+      const system = buildSystem({
+        base: effectivePrompt(settings),
+        kit,
+        kind: target.kind,
+        manifest,
+        plan: settings.planFirst,
+        review: mode === 'review',
+      })
+      const request =
+        mode === 'build'
+          ? buildRequest(target.kind, text)
+          : mode === 'review'
+            ? reviewRequest(target, base!)
+            : mode === 'repair'
+              ? repairRequest(target, base!, text)
+              : mode === 'port'
+                ? portRequest(target, base!, base!.kit, kit)
+                : refineRequest(target, base!, n, text)
+      const said =
+        mode === 'review'
+          ? 'Review it'
+          : mode === 'repair'
+            ? `Fix: ${text.split('\n')[0].slice(0, 160)}`
+            : mode === 'port'
+              ? `Rebuild it with ${kitById(kit).name}`
+              : text
+      const itemId = target.id
+      addTurn(itemId, { role: 'user', mode, text: said })
+
+      const controller = new AbortController()
+      abort.current = controller
+      running.current = { itemId, mode }
+      setThought('')
+      setPhase(mode === 'review' ? 'reviewing' : 'thinking')
+      setDraft({ itemId, mode, prose: '', plan: '', review: [] })
+      setDraftFiles(null)
+      setDraftDone(null)
+      if (settings.autoSwitchTabs && mode !== 'review') setTab('code')
+
+      let raw = ''
+      let lastParse = 0
+      let doneSig = ''
+      let broken: Error | null = null
+      // parseArtifacts re-reads the whole stream, so it runs on an interval
+      // rather than per token, and once more at the end.
+      const flush = () => {
+        const p = parseArtifacts(raw)
+        setDraft({ itemId, mode, prose: p.prose, plan: p.plan, review: p.review })
+        if (p.files.length) {
+          if (mode !== 'review') setPhase('writing')
+          setDraftFiles({ itemId, files: p.files })
+          const done = p.files.filter((f) => f.complete)
+          const sig = done.map((f) => `${f.path}:${f.content.length}`).join('|')
+          if (sig !== doneSig) {
+            doneSig = sig
+            setDraftDone({ itemId, files: done, kit })
+          }
+        } else if (p.plan) {
+          setPhase((ph) => (ph === 'thinking' ? 'planning' : ph))
+        }
+      }
+
+      try {
+        await streamChat({
+          model,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: request },
+          ],
+          temperature: settings.temperature,
+          topP: settings.topP,
+          maxTokens: maxTokensFor(settings),
+          thinking: settings.thinking,
+          signal: controller.signal,
+          onThought: settings.showReasoning ? (t) => setThought((prev) => (prev + t).slice(-4000)) : undefined,
+          onToken: (token) => {
+            raw += token
+            if (!broken && DEGENERATE.test(raw.slice(-64))) {
+              // Record first, then abort: a plain abort is the user pressing
+              // Stop and stays quiet, which would hide this.
+              broken = new Error(
+                `The model started repeating “${raw.slice(-1)}” endlessly. Its output is broken, not slow. ` +
+                  'Switch to another model from the header; if this one keeps doing it, delete and re-download it.',
+              )
+              controller.abort()
+              return
+            }
+            const now = performance.now()
+            if (now - lastParse < PARSE_INTERVAL_MS) return
+            lastParse = now
+            flush()
+          },
+        })
+        flush()
+        if (broken) throw broken
+
+        const p = parseArtifacts(raw)
+        if (mode === 'review') {
+          if (!p.review.length) throw new Error('The model answered without a review list. Try again, or use a stronger model.')
+          addTurn(itemId, { role: 'assistant', mode, text: p.prose, review: p.review })
+          return
+        }
+        const written = p.files.filter((f) => f.complete)
+        if (!written.length) {
+          throw new Error(
+            p.files.length
+              ? 'The model ran out of room in the middle of the file. Raise Answer length in Settings, or ask for something smaller.'
+              : 'The model answered without a <file> block. Try again, or pick a stronger model.',
+          )
+        }
+        const merged = mergeOutput(base, written)
+        if (!merged) throw new Error('The model wrote no JavaScript file to render.')
+        const number = addVersion(itemId, {
+          files: merged.files,
+          entry: merged.entry,
+          kit,
+          plan: p.plan,
+          prompt: said,
+          mode,
+          createdAt: Date.now(),
+        })
+        updateItem(itemId, (it) => ({ ...it, name: displayName(merged.entry) }))
+        addTurn(itemId, { role: 'assistant', mode, text: p.prose, plan: p.plan || undefined, version: number })
+        setViewed((v) => ({ ...v, [itemId]: number }))
+        if (settings.autoSwitchTabs) setTab('canvas')
+      } catch (e) {
+        if (controller.signal.aborted && !broken) return
+        addTurn(itemId, { role: 'assistant', mode, text: '', error: (broken ?? (e as Error)).message })
+      } finally {
+        if (abort.current === controller) {
+          abort.current = null
+          running.current = null
+          setPhase('idle')
+          setDraft(null)
+          setDraftFiles(null)
+          setDraftDone(null)
+        }
+      }
+    },
+    [model, manifest, selectedId, viewed, newKind, settings],
+  )
 
   const cancel = useCallback(() => {
-    abort.current?.abort()
-    setPhase('idle')
-    setThought('')
-    setTurns((t) => {
-      const next = [...t]
-      const last = next[next.length - 1]
-      if (last?.role === 'assistant') {
-        next[next.length - 1] = { role: 'assistant', text: `${last.text}\n\n(stopped)` .trim() }
-      }
-      return next
-    })
-    log('■ stopped')
-  }, [log])
+    const controller = abort.current
+    const run = running.current
+    if (!controller) return
+    controller.abort()
+    if (run) addTurn(run.itemId, { role: 'assistant', mode: run.mode, text: 'Stopped.' })
+  }, [])
 
   // Esc stops whatever is running.
   useEffect(() => {
@@ -380,40 +536,98 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [cancel])
 
-  // Self-heal missing dependencies before bothering the model.
-  useEffect(() => {
-    if (!buildError || !settings.autoInstallDeps) return
-    const pkg = missingPackage(buildError)
-    if (!pkg || autoInstalled.current.has(pkg)) return
-    autoInstalled.current.add(pkg)
-    void (async () => {
-      log(`↻ missing dependency "${pkg}", installing it`)
-      const wc = await getContainer(log)
-      const code = await installPackages(wc, [pkg], log)
-      if (code === 0) {
-        log(`✓ installed ${pkg}`)
-        setBuildError(null)
+  const submit = useCallback(() => {
+    const text = prompt.trim()
+    if (!text || busy) return
+    setPrompt('')
+    void generate(item ? 'refine' : 'build', text)
+  }, [prompt, busy, item, generate])
+
+  const onEdit = useCallback(
+    (path: string, content: string) => {
+      const it = findItem(selectedId)
+      if (!it) return
+      const n = Math.min(viewed[it.id] ?? it.versions.length, it.versions.length)
+      const v = it.versions[n - 1]
+      if (!v) return
+      editing.current = true
+      const files = { ...v.files, [path]: content }
+      // Typing into the newest hand-edited version keeps editing it; anything
+      // else starts a new version, so what the model wrote stays intact.
+      if (n === it.versions.length && v.mode === 'edit') {
+        updateItem(it.id, (x) => ({ ...x, versions: x.versions.map((y, i) => (i === n - 1 ? { ...y, files } : y)) }))
+      } else {
+        const number = addVersion(it.id, { ...v, files, mode: 'edit', prompt: 'Edited by hand', plan: '', createdAt: Date.now() })
+        addTurn(it.id, { role: 'assistant', mode: 'edit', text: 'Edited by hand.', version: number })
+        setViewed((x) => ({ ...x, [it.id]: number }))
       }
-    })()
-  }, [buildError, log, settings.autoInstallDeps])
-
-  const repair = useCallback(() => {
-    if (!buildError) return
-    void submit(
-      `The dev server failed to compile with this error:\n\n${buildError}\n\n` +
-        'Fix it and output the corrected file(s) in full.',
-    )
-  }, [buildError, submit])
-
-  const busy = phase === 'thinking' || phase === 'writing' || phase === 'installing' || phase === 'booting'
-  const examples = useMemo(
-    () => [
-      'A pomodoro timer with start, pause and reset, and a circular progress ring',
-      'A markdown note-taking app with a live preview pane',
-      'A tip calculator with a bill amount, tip slider and per-person split',
-    ],
-    [],
+    },
+    [selectedId, viewed],
   )
+
+  const pickKit = useCallback(
+    (kit: KitId) => {
+      setKitMenuOpen(false)
+      if (item && version && kit !== version.kit) void generate('port', '', kit)
+      else if (!item) setSettings({ kit })
+    },
+    [item, version, generate],
+  )
+
+  const startNew = useCallback(() => {
+    setSelectedId(null)
+    requestAnimationFrame(() => composer.current?.focus())
+  }, [])
+
+  const remove = useCallback(
+    (id: string) => {
+      deleteItem(id)
+      if (id === selectedId) setSelectedId(getLibrary().items[0]?.id ?? null)
+    },
+    [selectedId],
+  )
+
+  const showVersion = useCallback(
+    (n: number) => {
+      if (selectedId) setViewed((v) => ({ ...v, [selectedId]: n }))
+    },
+    [selectedId],
+  )
+
+  const applyReview = useCallback(
+    (points: string[]) => void generate('refine', `Apply these review points:\n${points.map((p) => `- ${p}`).join('\n')}`),
+    [generate],
+  )
+
+  const problem =
+    compiled && !compiled.ok
+      ? { title: 'Could not compile', message: compiled.error, dismissable: false }
+      : stageError
+        ? { title: ERROR_TITLE[stageError.kind] ?? 'Error', message: stageError.detail, dismissable: true }
+        : null
+
+  const currentKit = draftDone?.kit ?? version?.kit ?? settings.kit
+  const canvasKit = stage?.kit ?? currentKit
+  const canvasTheme = settings.canvasTheme === 'app' ? appTheme : settings.canvasTheme
+  const layout = (item?.kind ?? newKind) === 'section' ? 'fill' : 'center'
+  const errorCount = consoleEntries.filter((e) => e.level === 'error').length
+  const canAsk = serverOk && !!manifest && !busy
+
+  const serverNotice = !serverOk ? (
+    serverLoading ? (
+      <p className="loading-note">
+        <span className="spinner-dot" /> Loading the model…
+      </p>
+    ) : (
+      <p className="warn">
+        No model is running yet.{' '}
+        <button className="link" onClick={() => setBrowserOpen(true)} title={serverStatus}>
+          Pick one for this Mac
+        </button>
+        . It downloads and starts by itself.
+      </p>
+    )
+  ) : null
 
   return (
     <div className="app">
@@ -422,10 +636,38 @@ export default function App() {
           <span className="logo">⬢</span>
           <div>
             <strong>Jemero</strong>
-            <span className="sub">prompt → app, on a local model</span>
+            <span className="sub">component studio, on a local model</span>
           </div>
         </div>
         <div className="topbar-right">
+          <div className="model-anchor">
+            <button
+              className={`model-btn kit-btn${kitMenuOpen ? ' open' : ''}`}
+              ref={kitBtn}
+              onClick={() => setKitMenuOpen((v) => !v)}
+              disabled={busy}
+              title={item ? 'The kit this component is built with' : 'The kit new components are built with'}
+              aria-haspopup="menu"
+              aria-expanded={kitMenuOpen}
+            >
+              <svg className="kit-glyph" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round">
+                <path d="M12 2 3 7l9 5 9-5-9-5zM3 12l9 5 9-5M3 17l9 5 9-5" />
+              </svg>
+              <span className="model-name">{kitById(currentKit).name}</span>
+              <svg className="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            {kitMenuOpen && (
+              <KitMenu
+                anchorRef={kitBtn}
+                current={currentKit}
+                portTarget={item && version ? item.name : null}
+                onPick={pickKit}
+                onClose={() => setKitMenuOpen(false)}
+              />
+            )}
+          </div>
           <div className="model-anchor">
             <button
               className={`model-btn${menuOpen ? ' open' : ''}`}
@@ -453,12 +695,7 @@ export default function App() {
               />
             )}
           </div>
-          <button
-            className="icon-btn"
-            onClick={() => setSettingsOpen(true)}
-            title="Settings"
-            aria-label="Settings"
-          >
+          <button className="icon-btn" onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Settings">
             {/* Gear (Lucide "settings", ISC licence). */}
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
@@ -479,83 +716,88 @@ export default function App() {
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       <div className="body">
-        <section className="chat">
-          <div className="turns">
-            {!turns.length && (
-              <div className="hint">
-                <h2>Describe an app.</h2>
-                <p>
-                  It gets generated by your local model, then installed and run in a
-                  WebContainer sandbox in this tab.
-                </p>
-                <div className="examples">
-                  {examples.map((ex) => (
-                    <button key={ex} onClick={() => setPrompt(ex)}>{ex}</button>
-                  ))}
-                </div>
-                {!serverOk && serverLoading && (
-                  <p className="loading-note">
-                    <span className="spinner-dot" /> Loading the model…
-                  </p>
-                )}
-                {!serverOk && !serverLoading && (
-                  <p className="warn">
-                    No model is running yet.{' '}
-                    <button className="link" onClick={() => setBrowserOpen(true)} title={serverStatus}>
-                      Pick one for this Mac
-                    </button>
-                    . It downloads and starts by itself.
-                  </p>
-                )}
-              </div>
-            )}
-            {turns.map((t, i) => (
-              <div key={i} className={`turn ${t.role} enter`}>
-                {t.text || (t.role === 'assistant' && busy ? <PhaseLine phase={phase} /> : '')}
-              </div>
-            ))}
-            {thought && busy && settings.showReasoning && (
-              <details className="thought">
-                <summary>reasoning</summary>
-                <pre>{thought}</pre>
-              </details>
-            )}
-            {error && <div className="turn error enter">{error}</div>}
-            {buildError && !busy && (
-              <div className="turn build-error enter">
-                <strong>Build failed</strong>
-                <pre>{buildError}</pre>
-                <button onClick={repair}>Ask the model to fix it</button>
-              </div>
-            )}
-          </div>
+        <section className="side">
+          <Library
+            items={library.items}
+            selectedId={selectedId}
+            busyId={busy ? (draft?.itemId ?? null) : null}
+            onSelect={setSelectedId}
+            onNew={startNew}
+            onDelete={remove}
+          />
+
+          <Conversation
+            item={item}
+            draft={draft}
+            phaseLabel={phase === 'idle' ? null : PHASE_LABEL[phase]}
+            thought={thought}
+            showThought={settings.showReasoning}
+            busy={busy}
+            viewedVersion={viewedN}
+            newKind={newKind}
+            onKind={setNewKind}
+            examples={EXAMPLES[newKind]}
+            onExample={(ex) => {
+              setPrompt(ex)
+              composer.current?.focus()
+            }}
+            onVersion={showVersion}
+            onApplyReview={applyReview}
+            notice={serverNotice}
+          />
 
           <div className="composer">
+            {item && version && !busy && (
+              <div className="chips">
+                {REFINE_CHIPS[item.kind].map((c) => (
+                  <button key={c} className="chip-btn" onClick={() => void generate('refine', c)} disabled={!canAsk}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            )}
             <textarea
+              ref={composer}
               value={prompt}
               placeholder={
-                serverOk ? 'Build me…' : serverLoading ? 'Loading the model…' : 'No model is serving. Pick one from the header'
+                !serverOk
+                  ? serverLoading
+                    ? 'Loading the model…'
+                    : 'No model is serving. Pick one from the header'
+                  : item
+                    ? `Change ${item.name}: “make it compact”, “add a clear button”…`
+                    : `Describe a ${newKind}: what it shows and how it behaves`
               }
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void submit()
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
               }}
               rows={3}
             />
-            {busy ? (
-              <button className="stop" onClick={cancel}>
-                <span className="stop-icon" /> Stop · {PHASE_LABEL[phase]}
-                <span className="kbd">esc</span>
-              </button>
-            ) : (
-              <button
-                className="send"
-                onClick={() => void submit()}
-                disabled={!serverOk || !prompt.trim()}
-              >
-                Generate ⌘↵
-              </button>
-            )}
+            <div className="composer-actions">
+              {busy ? (
+                <button className="stop" onClick={cancel}>
+                  <span className="stop-icon" /> Stop · {PHASE_LABEL[phase as Exclude<Phase, 'idle'>]}
+                  <span className="kbd">esc</span>
+                </button>
+              ) : (
+                <>
+                  {item && version && (
+                    <button
+                      className="btn ghost review-btn"
+                      onClick={() => void generate('review', '')}
+                      disabled={!canAsk}
+                      title="Ask the model for a critique you can apply"
+                    >
+                      Review
+                    </button>
+                  )}
+                  <button className="send" onClick={submit} disabled={!canAsk || !prompt.trim()}>
+                    {item ? 'Refine' : 'Generate'} <span className="kbd light">⌘↵</span>
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </section>
 
@@ -564,51 +806,182 @@ export default function App() {
             <div className="tab-group" style={{ '--tab-index': TABS.indexOf(tab) } as React.CSSProperties}>
               <span className="tab-pill" />
               {TABS.map((t) => (
-                <button
-                  key={t}
-                  className={tab === t ? 'tab active' : 'tab'}
-                  onClick={() => setTab(t)}
-                  aria-current={tab === t}
-                >
+                <button key={t} className={tab === t ? 'tab active' : 'tab'} onClick={() => setTab(t)} aria-current={tab === t}>
                   {t}
+                  {t === 'console' && errorCount > 0 && <span className="tab-badge">{errorCount}</span>}
                 </button>
               ))}
             </div>
+
+            {tab === 'canvas' && (
+              <div className="canvas-tools">
+                <div className="segmented" role="radiogroup" aria-label="Canvas width">
+                  {WIDTHS.map((w) => (
+                    <button
+                      key={w.id}
+                      className={settings.canvasWidth === w.id ? 'seg icon active' : 'seg icon'}
+                      onClick={() => setSettings({ canvasWidth: w.id })}
+                      title={w.label}
+                      aria-label={w.label}
+                      role="radio"
+                      aria-checked={settings.canvasWidth === w.id}
+                    >
+                      <Icon d={w.icon} size={13} />
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="icon-btn"
+                  onClick={() => setSettings({ canvasTheme: NEXT_THEME[settings.canvasTheme] })}
+                  title={`Canvas theme: ${settings.canvasTheme === 'app' ? 'follows the app' : settings.canvasTheme}`}
+                  aria-label="Canvas theme"
+                >
+                  {settings.canvasTheme === 'light' ? (
+                    <Icon d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4" />
+                  ) : settings.canvasTheme === 'dark' ? (
+                    <Icon d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+                  ) : (
+                    <Icon d="M12 3a9 9 0 1 0 0 18V3zM12 3a9 9 0 0 1 0 18" />
+                  )}
+                </button>
+                <button
+                  className="icon-btn"
+                  onClick={() => setSettings({ canvasBg: NEXT_BG[settings.canvasBg] })}
+                  title={`Canvas background: ${settings.canvasBg}`}
+                  aria-label="Canvas background"
+                >
+                  {settings.canvasBg === 'dots' ? (
+                    <Icon d="M6 6h.01M12 6h.01M18 6h.01M6 12h.01M12 12h.01M18 12h.01M6 18h.01M12 18h.01M18 18h.01" />
+                  ) : settings.canvasBg === 'grid' ? (
+                    <Icon d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+                  ) : (
+                    <Icon d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+                  )}
+                </button>
+                <button
+                  className="icon-btn"
+                  onClick={() => setResetKey((k) => k + 1)}
+                  disabled={!stage}
+                  title="Reset the component's state"
+                  aria-label="Reset state"
+                >
+                  <Icon d="M3 12a9 9 0 1 0 2.64-6.36M3 3v6h6" />
+                </button>
+              </div>
+            )}
+
             <span className="phase">
-              <PhaseLine phase={phase} />
+              {busy ? (
+                <span key={phase} className="phase-text">
+                  {PHASE_LABEL[phase as Exclude<Phase, 'idle'>]}
+                </span>
+              ) : renderMs !== null && stage ? (
+                <span className="phase-text">Rendered in {renderMs} ms</span>
+              ) : null}
             </span>
-            <button
-              className="icon-btn"
-              onClick={() => {
-                setBuildError(null)
-                setReloadKey((k) => k + 1)
-              }}
-              disabled={!previewUrl}
-              title="Reload preview"
-              aria-label="Reload preview"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-                <path d="M21 3v6h-6" />
-              </svg>
-            </button>
+
+            {item && item.versions.length > 0 && (
+              <div className="versions" aria-label="Versions">
+                <button className="icon-btn" onClick={() => showVersion(viewedN - 1)} disabled={viewedN <= 1} title="Previous version" aria-label="Previous version">
+                  <Icon d="M15 18l-6-6 6-6" />
+                </button>
+                <span className="versions-label">
+                  v{viewedN}
+                  <span className="versions-of"> / {item.versions.length}</span>
+                </span>
+                <button
+                  className="icon-btn"
+                  onClick={() => showVersion(viewedN + 1)}
+                  disabled={viewedN >= item.versions.length}
+                  title="Next version"
+                  aria-label="Next version"
+                >
+                  <Icon d="M9 18l6-6-6-6" />
+                </button>
+              </div>
+            )}
           </nav>
-          {/* All three stay mounted, the preview iframe and the WebContainer
-              service worker behind it must not be torn down on a tab switch,
+
+          {/* All three stay mounted: the canvas iframe must survive tab switches,
               so visibility is a class, not `hidden`, and can be transitioned. */}
           <div className="pane">
-            <div className={`fill slot${tab === 'preview' ? ' shown' : ''}`}>
-              <Preview
-                url={previewUrl}
-                reloadKey={reloadKey}
-                status={busy ? PHASE_LABEL[phase] : 'No preview yet. Send a prompt.'}
-              />
+            <div className={`fill slot canvas-slot${tab === 'canvas' ? ' shown' : ''}`}>
+              {variants.length > 0 && (
+                <div className="variant-bar" role="tablist" aria-label="States">
+                  {([[null, 'Preview'], ...variants.map((v) => [v, v]), ['*', 'All states']] as [string | null, string][]).map(
+                    ([id, label]) => (
+                      <button
+                        key={label}
+                        className={variant === id ? 'variant active' : 'variant'}
+                        onClick={() => setVariant(id)}
+                        role="tab"
+                        aria-selected={variant === id}
+                      >
+                        {label}
+                      </button>
+                    ),
+                  )}
+                </div>
+              )}
+              <Stage
+                code={stage?.code ?? null}
+                kit={canvasKit}
+                layout={layout}
+                theme={canvasTheme}
+                bg={settings.canvasBg}
+                width={settings.canvasWidth}
+                variant={variant}
+                resetKey={resetKey}
+                onEvent={onStageEvent}
+              >
+                {!stage && (
+                  <div className="canvas-empty">
+                    {manifestError ? (
+                      <p className="warn">{manifestError}</p>
+                    ) : busy && draft?.itemId === item?.id ? (
+                      <>
+                        <span className="canvas-pulse" />
+                        <p>{PHASE_LABEL[phase as Exclude<Phase, 'idle'>]}</p>
+                      </>
+                    ) : item ? (
+                      <p>{item.versions.length ? 'Loading…' : 'Not built yet. Describe it on the left.'}</p>
+                    ) : (
+                      <p>Your component renders here, live and interactive.</p>
+                    )}
+                  </div>
+                )}
+                {problem && (
+                  <div className="canvas-error" role="alert">
+                    <div className="canvas-error-text">
+                      <strong>{problem.title}</strong>
+                      <pre>{problem.message}</pre>
+                    </div>
+                    <div className="canvas-error-actions">
+                      <button className="btn small" onClick={() => void generate('repair', problem.message)} disabled={!canAsk || !version}>
+                        Fix with the model
+                      </button>
+                      {problem.dismissable && (
+                        <button className="icon-btn" onClick={() => setStageError(null)} aria-label="Dismiss">
+                          <Icon d="M6 6l12 12M18 6L6 18" size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </Stage>
             </div>
             <div className={`fill slot${tab === 'code' ? ' shown' : ''}`}>
-              <CodeView files={files} libraryPaths={LOCKED_PATHS} />
+              <CodeView
+                files={codeFiles}
+                kitFiles={kitFiles}
+                entry={source?.entry ?? version?.entry ?? null}
+                editable={!busy && !!version}
+                streaming={streamingPath}
+                onEdit={onEdit}
+              />
             </div>
-            <div className={`fill slot${tab === 'terminal' ? ' shown' : ''}`}>
-              <TerminalView lines={logs} theme={settings.theme} />
+            <div className={`fill slot${tab === 'console' ? ' shown' : ''}`}>
+              <ConsoleView entries={consoleEntries} onClear={() => setConsoleEntries([])} />
             </div>
           </div>
         </section>

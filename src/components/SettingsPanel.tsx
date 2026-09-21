@@ -6,13 +6,10 @@ import {
   ANSWER_HINT,
   ANSWER_TOKENS,
   DEFAULTS,
-  MEMORY_CHARS,
-  MEMORY_HINT,
   resetSettings,
   setSettings,
   useSettings,
   type AnswerLength,
-  type Memory,
   type Theme,
 } from '../lib/settings'
 
@@ -69,16 +66,16 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
               <Toggle value={s.showReasoning} onChange={(showReasoning) => setSettings({ showReasoning })} />
             </Row>
 
-            <Row label="Follow the pipeline" hint="Switches tab to code, then terminal, then preview.">
+            <Row label="Plan before coding" hint="A short plan first: anatomy, states, props, behaviour. Better components, a few seconds slower.">
+              <Toggle value={s.planFirst} onChange={(planFirst) => setSettings({ planFirst })} />
+            </Row>
+
+            <Row label="Watch the code being written" hint="Shows the code tab while the model writes, then the canvas.">
               <Toggle value={s.autoSwitchTabs} onChange={(autoSwitchTabs) => setSettings({ autoSwitchTabs })} />
             </Row>
 
-            <Row label="Fix forgotten imports" hint="Adds design-system imports the model left out.">
+            <Row label="Repair imports" hint="Adds forgotten imports, maps unknown icon names to real ones, rewrites deep imports.">
               <Toggle value={s.autoFixImports} onChange={(autoFixImports) => setSettings({ autoFixImports })} />
-            </Row>
-
-            <Row label="Install undeclared packages" hint="Installs anything the generated code imports.">
-              <Toggle value={s.autoInstallDeps} onChange={(autoInstallDeps) => setSettings({ autoInstallDeps })} />
             </Row>
 
             <button className="btn ghost wide-btn" onClick={() => resetSettings()}>
@@ -113,21 +110,6 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
                   ['long', 'Long'],
                 ]}
                 onChange={(answerLength) => setSettings({ answerLength })}
-              />
-            </Row>
-
-            <Row
-              label="Memory"
-              hint={`${MEMORY_HINT[s.memory]} · keeps ${(MEMORY_CHARS[s.memory] / 1000).toFixed(0)}k characters of history`}
-            >
-              <Segmented<Memory>
-                value={s.memory}
-                options={[
-                  ['short', 'Short'],
-                  ['normal', 'Normal'],
-                  ['long', 'Long'],
-                ]}
-                onChange={(memory) => setSettings({ memory })}
               />
             </Row>
 
@@ -176,8 +158,8 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
           <>
             <p className="note">
               {usingDefaultPrompt
-                ? 'Using the built-in prompt: the design system, the <file> output format and the rules that keep small models on track.'
-                : 'Custom prompt. It replaces the built-in one entirely, including the output-format rules. Keep the <file path="…"> blocks or nothing gets written.'}
+                ? 'Using the built-in prompt: what to build (one component, a Preview, optional variants) and the quality bar. The output format, the kit and the size brief are added after it either way.'
+                : 'Custom prompt. It replaces the built-in rules; the output format, the kit and the size brief are still added after it.'}
             </p>
 
             <textarea

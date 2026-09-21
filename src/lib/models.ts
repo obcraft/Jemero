@@ -72,6 +72,8 @@ export type Progress = {
 
 type Bridge = {
   settings: { load(): unknown; save(value: unknown): void }
+  /** The component library (lib/library.ts), kept in library.json. */
+  library: { load(): unknown; save(value: unknown): void }
   device(): Promise<Device>
   catalog(priority?: Priority): Promise<CatalogSnapshot>
   install(modelId: string): Promise<{ ok: boolean; reason?: string }>

@@ -6,11 +6,14 @@
 // museum. Each field notes where it takes effect.
 import { useSyncExternalStore } from 'react'
 import { SYSTEM_PROMPT } from './systemPrompt'
+import type { KitId } from './kits'
 import type { Priority } from './models'
 
 export type Theme = 'system' | 'dark' | 'light'
 export type AnswerLength = 'brief' | 'standard' | 'long'
-export type Memory = 'short' | 'normal' | 'long'
+export type CanvasTheme = 'app' | 'light' | 'dark'
+export type CanvasBg = 'dots' | 'grid' | 'plain'
+export type CanvasWidth = 'fit' | '375' | '768' | '1280'
 
 export type Settings = {
   /** Applied to <html data-theme>, which drives the CSS variables. */
@@ -22,8 +25,6 @@ export type Settings = {
   /** Sampling. Low temperature is what keeps the file format intact. */
   temperature: number
   topP: number
-  /** How much history `trimHistory` keeps before dropping older turns. */
-  memory: Memory
   /** Empty means "use the built-in prompt". */
   systemPrompt: string
   /**
@@ -33,16 +34,22 @@ export type Settings = {
   thinking: boolean
   /** Show the model's reasoning while it streams, when there is any. */
   showReasoning: boolean
+  /** Ask for a short <plan> (anatomy, states, props, behaviour) before the code. */
+  planFirst: boolean
   /** Code tab: file list open or collapsed. */
   fileTreeOpen: boolean
-  /** Add design-system imports the model forgot (src/lib/imports.ts). */
+  /** Repair imports before rendering (compile.ts): missing ones, wrong icons, deep paths. */
   autoFixImports: boolean
-  /** Install packages the generated code imports but never declared. */
-  autoInstallDeps: boolean
-  /** Follow the pipeline: code while writing, terminal on install, preview when ready. */
+  /** Show the code while it's written, then the canvas when it's ready. */
   autoSwitchTabs: boolean
   /** What the model recommendation optimises for. */
   modelPriority: Priority
+  /** The kit new components are built with. */
+  kit: KitId
+  /** Canvas: light or dark, or follow the app. */
+  canvasTheme: CanvasTheme
+  canvasBg: CanvasBg
+  canvasWidth: CanvasWidth
 }
 
 export const DEFAULTS: Settings = {
@@ -51,44 +58,35 @@ export const DEFAULTS: Settings = {
   answerLength: 'standard',
   temperature: 0.2,
   topP: 0.95,
-  memory: 'normal',
   systemPrompt: '',
   thinking: false,
   showReasoning: true,
+  planFirst: true,
   fileTreeOpen: true,
   autoFixImports: true,
-  autoInstallDeps: true,
-  autoSwitchTabs: true,
+  autoSwitchTabs: false,
   modelPriority: 'balanced',
+  kit: 'shadcn',
+  canvasTheme: 'app',
+  canvasBg: 'dots',
+  canvasWidth: 'fit',
 }
 
 /**
- * The served context is 16k and the prompt has to fit in it alongside the
- * answer, so these are the honest ceilings rather than round marketing numbers.
+ * The served context is 16k and the prompt (with the current code, on a
+ * refinement) has to fit in it alongside the answer, so these are the honest
+ * ceilings rather than round marketing numbers.
  */
 export const ANSWER_TOKENS: Record<AnswerLength, number> = {
-  brief: 1536,
+  brief: 2048,
   standard: 4096,
   long: 6144,
 }
 
 export const ANSWER_HINT: Record<AnswerLength, string> = {
-  brief: 'One file, one screen. Fastest.',
-  standard: 'Up to ~4 files. The default.',
-  long: 'Room for a bigger app. Uses most of a 16k window.',
-}
-
-/** Characters of history kept; ~3.5 chars per token against a 16k window. */
-export const MEMORY_CHARS: Record<Memory, number> = {
-  short: 18_000,
-  normal: 36_000,
-  long: 48_000,
-}
-
-export const MEMORY_HINT: Record<Memory, string> = {
-  short: 'Forgets fast, always has room to answer.',
-  normal: 'A few follow-ups. Matches the 16k window.',
-  long: 'More context, tighter fit. Keep answers on Brief or Standard.',
+  brief: 'Small components. Fastest.',
+  standard: 'Most components and blocks. The default.',
+  long: 'Sections and big blocks. Uses most of a 16k window.',
 }
 
 const KEY = 'jemero.settings.v1'
@@ -150,11 +148,30 @@ export function useSettings(): Settings {
   return useSyncExternalStore(subscribe, getSettings, () => DEFAULTS)
 }
 
-/** The prompt actually sent: the user's override, or the built-in one. */
+/** The base prompt actually sent: the user's override, or the built-in one. */
 export const effectivePrompt = (s: Settings = current) => s.systemPrompt.trim() || SYSTEM_PROMPT
 
 export const maxTokensFor = (s: Settings = current) => ANSWER_TOKENS[s.answerLength]
-export const memoryCharsFor = (s: Settings = current) => MEMORY_CHARS[s.memory]
+
+const lightQuery = () => window.matchMedia('(prefers-color-scheme: light)')
+
+/** 'system' resolved against the OS. */
+export const resolveTheme = (theme: Theme): 'light' | 'dark' =>
+  theme === 'system' ? (lightQuery().matches ? 'light' : 'dark') : theme
+
+/** The app's resolved theme, following the OS live when set to 'system'. */
+export function useResolvedTheme(): 'light' | 'dark' {
+  const { theme } = useSettings()
+  return useSyncExternalStore(
+    (fn) => {
+      const media = lightQuery()
+      media.addEventListener('change', fn)
+      return () => media.removeEventListener('change', fn)
+    },
+    () => resolveTheme(theme),
+    () => 'dark',
+  )
+}
 
 /**
  * Resolve `theme` against the OS and write it to <html>, plus a motion flag the
@@ -162,10 +179,9 @@ export const memoryCharsFor = (s: Settings = current) => MEMORY_CHARS[s.memory]
  * for the OS listener so 'system' keeps tracking.
  */
 export function applyAppearance(settings: Settings = current): () => void {
-  const media = window.matchMedia('(prefers-color-scheme: light)')
+  const media = lightQuery()
   const paint = () => {
-    const resolved = settings.theme === 'system' ? (media.matches ? 'light' : 'dark') : settings.theme
-    document.documentElement.dataset.theme = resolved
+    document.documentElement.dataset.theme = resolveTheme(settings.theme)
     document.documentElement.dataset.motion = settings.animations ? 'on' : 'off'
   }
   paint()

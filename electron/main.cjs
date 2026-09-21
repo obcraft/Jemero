@@ -9,12 +9,6 @@ const models = require('./install.cjs')
 const runtime = require('./runtime.cjs')
 const { startServer } = require('./serve.cjs')
 
-// WebContainer serves its preview from a *.webcontainer-api.io origin backed by a
-// Service Worker inside a cross-origin iframe. Chromium only allows that when
-// third-party storage partitioning is on, and Electron ships with it off, without
-// this switch the preview pane shows "Enable Storage Partitioning".
-app.commandLine.appendSwitch('enable-features', 'ThirdPartyStoragePartitioning')
-
 const isDev = !app.isPackaged
 
 // JEMERO_THEME=light|dark overrides the OS for this run, the renderer's
@@ -48,7 +42,6 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.join(__dirname, 'preload.cjs'),
-      // WebContainer's preview iframe is cross-origin; keep the default sandbox.
     },
   })
 
@@ -173,27 +166,33 @@ function emit(payload) {
  * llama.cpp server, so the renderer only ever sees plain JSON.
  */
 /**
- * Settings live in a file, not the renderer's localStorage: the UI is served
- * from a fresh port each launch, localStorage is keyed by origin (port
- * included), so anything stored there was quietly lost on every restart.
+ * Settings and the component library live in files, not the renderer's
+ * localStorage: the UI is served from a fresh port each launch, localStorage is
+ * keyed by origin (port included), so anything stored there was quietly lost on
+ * every restart.
  */
-function registerSettingsIpc() {
-  const file = path.join(runtime.appSupport(), 'settings.json')
-  // Synchronous on purpose: the renderer needs them before its first paint,
-  // or it flashes the wrong theme. It's one small file, read once.
-  ipcMain.on('settings:load', (e) => {
+function registerStoreIpc(name, { pretty = false } = {}) {
+  const fs = require('node:fs')
+  const file = path.join(runtime.appSupport(), `${name}.json`)
+  // Synchronous on purpose: the renderer needs it before its first paint, or
+  // it flashes the wrong theme or an empty library. One small file, read once.
+  ipcMain.on(`${name}:load`, (e) => {
     try {
-      e.returnValue = JSON.parse(require('node:fs').readFileSync(file, 'utf8'))
+      e.returnValue = JSON.parse(fs.readFileSync(file, 'utf8'))
     } catch {
       e.returnValue = null
     }
   })
-  ipcMain.on('settings:save', (_e, value) => {
+  ipcMain.on(`${name}:save`, (_e, value) => {
     try {
-      require('node:fs').mkdirSync(path.dirname(file), { recursive: true })
-      require('node:fs').writeFileSync(file, JSON.stringify(value, null, 2) + '\n')
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      // Written aside and renamed into place, so a crash mid-write can't leave
+      // half a library behind.
+      const tmp = `${file}.tmp`
+      fs.writeFileSync(tmp, JSON.stringify(value, null, pretty ? 2 : 0) + '\n')
+      fs.renameSync(tmp, file)
     } catch {
-      /* disk full or read-only, keep running on in-memory settings */
+      /* disk full or read-only, keep running on what's in memory */
     }
   })
 }
@@ -256,7 +255,8 @@ function registerModelIpc() {
 
 async function bootstrap() {
   buildMenu()
-  registerSettingsIpc()
+  registerStoreIpc('settings', { pretty: true })
+  registerStoreIpc('library')
   registerModelIpc()
   createWindow()
   showBootScreen('Starting…')
@@ -309,9 +309,9 @@ async function bootstrap() {
   }
 }
 
-// Two instances share one userData directory and fight over the Service Worker
-// database, which is exactly what WebContainer's preview runs on. Refuse the
-// second launch and focus the window that already exists.
+// Two instances would start two model servers on one port and race each other
+// writing library.json. Refuse the second launch and focus the window that
+// already exists.
 if (!app.requestSingleInstanceLock()) {
   console.log('Jemero is already running, focusing that window.')
   app.quit()

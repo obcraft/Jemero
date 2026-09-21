@@ -1,6 +1,6 @@
 // Client for the built-in llama.cpp server's OpenAI-compatible API (electron/model.cjs).
-// Reached through the Vite proxy at /llm (see vite.config.ts) so the page stays
-// same-origin and cross-origin isolation for WebContainer doesn't break it.
+// Reached through the same-origin proxy at /llm (vite.config.ts in development,
+// electron/serve.cjs in the app), so the page never makes a cross-origin call.
 
 const BASE = '/llm'
 
@@ -172,26 +172,4 @@ export async function streamChat(opts: StreamOpts): Promise<string> {
     opts.onToken(tail)
   }
   return full
-}
-
-/**
- * Generated files go into the history verbatim, so a few follow-up turns can blow
- * past the context window. Keep the system prompt plus the most recent turns that
- * fit in a rough character budget (~3.5 chars/token, sized for a 16k window
- * shared with a 4k completion). The budget is a setting, see lib/settings.ts.
- */
-export function trimHistory(messages: ChatMessage[], maxChars = 36_000): ChatMessage[] {
-  const system = messages[0]
-  const rest = messages.slice(1)
-  let total = system.content.length
-  const kept: ChatMessage[] = []
-
-  for (let i = rest.length - 1; i >= 0; i--) {
-    total += rest[i].content.length
-    if (total > maxChars && kept.length > 0) break
-    kept.unshift(rest[i])
-  }
-  // Never start the kept window on an assistant reply.
-  while (kept.length && kept[0].role === 'assistant') kept.shift()
-  return [system, ...kept]
 }

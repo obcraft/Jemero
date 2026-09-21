@@ -1,75 +1,139 @@
-export const SYSTEM_PROMPT = `You are a code generator for a React + Vite app running in a browser sandbox.
+// What the model is told. The system prompt is three parts: the base rules
+// (editable in Settings), the kit's own brief (kits.ts), and what size of thing
+// is being built. Requests are stateless: a follow-up sends the current code
+// plus a short list of earlier requests instead of the whole conversation, so a
+// long refinement session never overflows a 16k context.
+import { kitById, type KitId, type Manifest } from './kits'
+import type { Item, Kind, Version } from './library'
 
-A complete design system is ALREADY INSTALLED. Compose with it. Never write plain
-CSS, never write a <style> tag, never invent your own colours.
+export const SYSTEM_PROMPT = `You are a senior design engineer. You design and build ONE piece of React UI at a time for a
+live preview canvas: a component, a block or a page section. Never a whole app, and never a page shell around it.
 
-AVAILABLE (import these, they exist):
-  Tailwind CSS       utility classes, already configured
-  shadcn/ui          './components/ui/button.jsx'  -> Button
-                     './components/ui/card.jsx'    -> Card, CardHeader, CardTitle,
-                                                      CardDescription, CardContent, CardFooter
-                     './components/ui/input.jsx'   -> Input
-                     './components/ui/label.jsx'   -> Label
-                     './components/ui/badge.jsx'   -> Badge
-                     './components/ui/slider.jsx'  -> Slider
-                     './components/ui/switch.jsx'  -> Switch
-                     './components/ui/tabs.jsx'    -> Tabs, TabsList, TabsTrigger, TabsContent
-  lucide-react       icons, e.g. import { Plus, Minus } from 'lucide-react'
-  recharts           charts, e.g. LineChart, BarChart, PieChart
-  cn()               './lib/utils.js' for conditional classes
+THE FILE:
+1. One .jsx file named after the component in PascalCase, e.g. OtpInput.jsx. Plain JavaScript, no TypeScript.
+2. export function OtpInput(props) {…}: the reusable component. Its data and callbacks come in as props, with
+   sensible defaults.
+3. export default function Preview() {…}: renders the component with realistic sample data, wired to useState so
+   everything really works. Only the component: no page title, no heading, no explanation around it.
+4. Optional: export const variants = { Default: () => <OtpInput />, Error: () => <OtpInput error="Wrong code" /> }
+   with 2 to 4 states worth reviewing side by side.
+5. The complete file every time. Never "...", never "rest unchanged".
+6. Import only what the kit below lists. Nothing else is installed and there is no network. No CSS files, no
+   <style> tags.
 
-COMPONENT USAGE (these take arrays and controlled props, get them right):
-  <Slider value={[tip]} onValueChange={([v]) => setTip(v)} min={0} max={30} step={1} />
-  <Switch checked={on} onCheckedChange={setOn} />
-  <Tabs value={tab} onValueChange={setTab}> <TabsList><TabsTrigger value="a">A</TabsTrigger></TabsList>
-    <TabsContent value="a">…</TabsContent> </Tabs>
-  <Input value={text} onChange={(e) => setText(e.target.value)} />
-Slider and Switch are Radix: a bare number for Slider's value crashes at render.
+QUALITY BAR:
+- Real behaviour, not placeholders: live filtering, selection, validation, keyboard support, focus handling.
+- Accessible: labels, roles and aria attributes, visible focus.
+- Edge cases handled: empty, loading, disabled, error, long text (truncate), many items (scroll).
+- Looks designed: consistent spacing, clear hierarchy, subtle borders, right in light and dark.`
 
-Import every component you use. A component used without its import renders a
-blank page.
+const FORMAT_WITH_PLAN = `OUTPUT FORMAT (exactly this, nothing after </file>):
+One sentence saying what you will build.
+<plan>
+- Anatomy: the parts, in order
+- States: the ones that apply
+- Props: data and callbacks, with defaults
+- Behaviour: interactions and keyboard
+</plan>
+<file path="OtpInput.jsx">
+…the complete file…
+</file>`
 
-Use the theme tokens, not raw colours: bg-background, text-foreground, bg-card,
-text-muted-foreground, bg-primary, text-primary-foreground, bg-secondary, border,
-bg-destructive. They already work in dark mode.
+const FORMAT_NO_PLAN = `OUTPUT FORMAT (exactly this, nothing after </file>):
+One sentence saying what you will build.
+<file path="OtpInput.jsx">
+…the complete file…
+</file>`
 
-OUTPUT FORMAT (follow exactly):
-
-<file path="src/App.jsx">
-import { Button } from './components/ui/button.jsx'
-
-export default function App() {
-  return (
-    <main className="grid min-h-screen place-items-center bg-background">
-      <Button>Click me</Button>
-    </main>
-  )
+const KIND_BRIEF: Record<Kind, string> = {
+  component:
+    'WHAT YOU BUILD: a single reusable component (a control such as a picker, input, menu, toggle, badge or card). ' +
+    'Preview shows it at its natural size, the way it sits in a real interface, not stretched across the canvas.',
+  block:
+    'WHAT YOU BUILD: a composed block (a form, a card with actions, a settings panel, a list with filters) made of ' +
+    'smaller components. Give it a natural width, between max-w-sm and max-w-3xl.',
+  section:
+    'WHAT YOU BUILD: a full-width page section (hero, feature grid, pricing, testimonials, FAQ, footer). It spans the ' +
+    'full width with an inner max-width container, and is responsive from 375px phones up to wide desktops.',
 }
-</file>
 
-Only if you need a package that is NOT listed above:
-<install>package-name</install>
+export const KIND_LABEL: Record<Kind, string> = { component: 'Component', block: 'Block', section: 'Section' }
 
-RULES:
-1. Output the COMPLETE contents of every file. Never write "..." or "rest unchanged".
-2. Always rewrite src/App.jsx in full when the app changes.
-3. Plain JavaScript with .jsx extensions. No TypeScript. Imports include the
-   extension: './components/ui/button.jsx'.
-4. NEVER rewrite these, they already exist: package.json, vite.config.js,
-   tailwind.config.js, postcss.config.js, index.html, src/main.jsx, src/index.css,
-   src/lib/utils.js, and anything under src/components/ui/.
-5. Prefer shadcn components over raw <button>/<input>. Use Card to group content.
-6. At most 4 files. Prefer one well-built src/App.jsx.
-7. One or two short sentences of explanation BEFORE the files. Nothing after the
-   last </file>.
+export function buildSystem(opts: {
+  base: string
+  kit: KitId
+  kind: Kind
+  manifest: Manifest
+  plan: boolean
+  review?: boolean
+}): string {
+  const format = opts.review ? '' : opts.plan ? FORMAT_WITH_PLAN : FORMAT_NO_PLAN
+  return [opts.base.trim(), format, KIND_BRIEF[opts.kind], kitById(opts.kit).prompt(opts.manifest)]
+    .filter(Boolean)
+    .join('\n\n')
+}
 
-Build interfaces that look designed: generous spacing, clear hierarchy, rounded
-cards, subtle borders. Prefer real working behaviour over placeholders.`
+function filesBlock(v: Version): string {
+  return Object.entries(v.files)
+    .map(([path, content]) => `<file path="${path}">\n${content}\n</file>`)
+    .join('\n\n')
+}
 
-export function buildUserTurn(prompt: string, existingFiles: string[], isFirst: boolean): string {
-  if (isFirst) return prompt
-  return `Files you have written so far: ${existingFiles.join(', ') || '(none)'}
+/** The requests that shaped the item so far, oldest first, so a refinement keeps their intent. */
+function history(item: Item): string {
+  const asked = item.turns
+    .filter((t) => t.role === 'user' && (t.mode === 'build' || t.mode === 'refine' || t.mode === 'port'))
+    .slice(-6)
+    .map((t, i) => `${i + 1}. ${t.text.length > 240 ? `${t.text.slice(0, 240)}…` : t.text}`)
+  return asked.length ? `Earlier requests, oldest first:\n${asked.join('\n')}\n\n` : ''
+}
 
-Apply this change, rewriting each affected file completely:
-${prompt}`
+export function buildRequest(kind: Kind, prompt: string): string {
+  return `Build this ${kind}: ${prompt}`
+}
+
+export function refineRequest(item: Item, base: Version, n: number, prompt: string): string {
+  return `The current ${item.kind}, ${item.name} (version ${n}):
+
+${filesBlock(base)}
+
+${history(item)}Change now: ${prompt}
+
+Rewrite the complete file. Keep everything that already works; change what is asked.`
+}
+
+export function repairRequest(item: Item, base: Version, error: string): string {
+  return `The current ${item.kind}, ${item.name}:
+
+${filesBlock(base)}
+
+The canvas could not render it:
+
+${error.slice(0, 1500)}
+
+Find the cause and output the complete corrected file. Keep the design and behaviour as they are.`
+}
+
+export function portRequest(item: Item, base: Version, fromKit: KitId, toKit: KitId): string {
+  return `The current ${item.kind}, ${item.name}, built with ${kitById(fromKit).name}:
+
+${filesBlock(base)}
+
+Rebuild this exact ${item.kind} with ${kitById(toKit).name} instead. Same behaviour, props, states and look, using
+that kit's own components. Output the complete file.`
+}
+
+export function reviewRequest(item: Item, base: Version): string {
+  return `Review this ${item.kind}, ${item.name}, like a demanding senior design engineer:
+
+${filesBlock(base)}
+
+Check accessibility (labels, roles, keyboard, focus), states (empty, loading, disabled, error, long content), visual
+polish (spacing, alignment, hierarchy, dark mode), responsiveness, and the props API.
+
+Reply ONLY with this, no code and no plan:
+<review>
+- one concrete improvement to make in the code, per line
+</review>
+3 to 6 lines, most important first. No praise.`
 }

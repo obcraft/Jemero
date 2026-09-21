@@ -1,17 +1,23 @@
 // The only bridge between the renderer and the model machinery.
 //
-// The window stays contextIsolated with nodeIntegration off, WebContainer's
-// preview runs untrusted generated code in there, so this exposes a small,
-// fixed set of calls rather than anything resembling `require`.
+// The window stays contextIsolated with nodeIntegration off and exposes a small,
+// fixed set of calls rather than anything resembling `require`. Generated code
+// never sees even these: the canvas runs it in a sandboxed iframe with an
+// opaque origin, and preload scripts don't run in subframes.
 const { contextBridge, ipcRenderer } = require('electron')
 
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args)
 
 contextBridge.exposeInMainWorld('jemero', {
-  /** User settings, persisted by the main process (see registerSettingsIpc). */
+  /** User settings, persisted by the main process (see registerStoreIpc). */
   settings: {
     load: () => ipcRenderer.sendSync('settings:load'),
     save: (value) => ipcRenderer.send('settings:save', value),
+  },
+  /** The component library: every component, version and conversation. */
+  library: {
+    load: () => ipcRenderer.sendSync('library:load'),
+    save: (value) => ipcRenderer.send('library:save', value),
   },
   /** Machine profile: chip, unified memory, GPU cores, bandwidth, model budget. */
   device: () => invoke('models:device'),
