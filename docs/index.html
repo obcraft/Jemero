@@ -7,7 +7,7 @@
   <meta name="description" content="Jemero is a coding agent that runs entirely on your Mac. Quantized AI models, sized to your memory. Local, offline, free." />
   <meta property="og:title" content="Jemero — your offline coding agent" />
   <meta property="og:description" content="Describe an app and a quantized AI model builds it, right on your Mac. Local, offline, free." />
-  <meta property="og:image" content="screenshot.jpg" />
+  <meta property="og:image" content="https://obcraft.github.io/jemero/demo.jpg" />
   <meta name="theme-color" content="#0b0d11" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 3l11.3 6.5v13L16 29 4.7 22.5v-13z' fill='none' stroke='%237c6cf7' stroke-width='3' stroke-linejoin='round'/%3E%3C/svg%3E" />
@@ -96,6 +96,119 @@
       display: block; width: 100%; height: auto;
       border-radius: 14px; border: 1px solid var(--line);
       box-shadow: var(--shadow);
+    }
+
+    /* Interactive demo ------------------------------------------------------ */
+    .demo { margin: 8px auto 0; }
+    .win {
+      border-radius: 16px; overflow: hidden; border: 1px solid var(--line);
+      background: #0e1116; color: #e6e9ef; box-shadow: var(--shadow);
+      font-size: 13px; text-align: left;
+    }
+    .win-bar {
+      display: flex; align-items: center; gap: 14px; height: 44px; padding: 0 16px;
+      background: #14181f; border-bottom: 1px solid #222833;
+    }
+    .lights { display: flex; gap: 7px; }
+    .lights i { width: 11px; height: 11px; border-radius: 50%; background: #3a404b; }
+    .lights i:nth-child(1) { background: #ff5f57; } .lights i:nth-child(2) { background: #febc2e; } .lights i:nth-child(3) { background: #28c840; }
+    .win-title { font-weight: 600; color: #cfd4dc; }
+    .model-pill {
+      margin-left: auto; display: inline-flex; align-items: center; gap: 7px; white-space: pre;
+      padding: 4px 10px; border: 1px solid #262c37; border-radius: 7px; color: #9aa3b2; font-size: 12px;
+    }
+    .model-pill b { color: #e6e9ef; font-weight: 600; }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #3fb950; box-shadow: 0 0 8px #3fb950; }
+
+    .win-body { display: grid; grid-template-columns: 300px 1fr; height: 460px; }
+    .chat { display: flex; flex-direction: column; border-right: 1px solid #222833; min-height: 0; }
+    .msgs { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; justify-content: flex-end; }
+    .msg { padding: 9px 12px; border-radius: 10px; line-height: 1.5; animation: rise .35s cubic-bezier(.16,1,.3,1); }
+    .msg.user { align-self: flex-end; background: #7c6cf7; color: #fff; max-width: 92%; }
+    .msg.bot { background: #171b22; border: 1px solid #242a34; color: #cfd4dc; }
+    .composer {
+      margin: 0 12px 12px; min-height: 64px; padding: 10px 12px; border: 1px solid #262c37;
+      border-radius: 10px; background: #12151b; color: #e6e9ef; line-height: 1.5;
+    }
+    .caret { display: inline-block; width: 2px; height: 1.1em; vertical-align: -3px; background: #7c6cf7; margin-left: 1px; animation: blink 1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .work { display: flex; flex-direction: column; min-width: 0; min-height: 0; position: relative; }
+    .work-bar { display: flex; align-items: center; justify-content: space-between; height: 46px; padding: 0 12px; border-bottom: 1px solid #222833; }
+    .tabs2 { position: relative; display: flex; background: #12151b; border: 1px solid #222833; border-radius: 8px; padding: 2px; }
+    .tabs2 button { position: relative; z-index: 1; background: none; border: 0; color: #8b95a6; font: inherit; font-size: 12px; padding: 5px 14px; width: 82px; cursor: pointer; transition: color .2s; }
+    .tabs2-pill { position: absolute; top: 2px; bottom: 2px; left: 2px; width: 82px; border-radius: 6px; background: #1f2530; transition: transform .35s cubic-bezier(.22,.8,.28,1); }
+    .tabs2[data-tab="preview"] .tabs2-pill { transform: translateX(82px); }
+    .tabs2[data-tab="code"] button[data-tab="code"], .tabs2[data-tab="preview"] button[data-tab="preview"] { color: #e6e9ef; }
+    .status { display: inline-flex; align-items: center; gap: 8px; color: #8b95a6; font-size: 12px; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #3a404b; transition: background .3s; }
+    .status.busy .status-dot { background: #7c6cf7; animation: pulse 1s ease-in-out infinite; }
+    .status.done .status-dot { background: #3fb950; }
+    @keyframes pulse { 50% { opacity: .35; transform: scale(.8); } }
+
+    .panes { position: relative; flex: 1; min-height: 0; }
+    .pane { position: absolute; inset: 0; transition: opacity .45s ease, transform .45s cubic-bezier(.22,.8,.28,1); }
+    .code-pane { display: flex; flex-direction: column; }
+    .preview-pane { opacity: 0; transform: translateY(8px) scale(.99); pointer-events: none; background: #eef0f4; display: grid; place-items: center; padding: 20px; }
+    .demo.show-preview .code-pane { opacity: 0; transform: translateY(-6px); pointer-events: none; }
+    .demo.show-preview .preview-pane { opacity: 1; transform: none; pointer-events: auto; }
+    .file-tab { font: 11.5px ui-monospace, Menlo, monospace; color: #8b95a6; padding: 10px 16px 0; }
+    #demo-code {
+      flex: 1; margin: 0; padding: 10px 16px 16px; overflow: hidden;
+      font: 12.5px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; color: #c9d1d9; white-space: pre;
+    }
+    #demo-code .k { color: #c792ea; } #demo-code .s { color: #a5d6a7; } #demo-code .t { color: #82aaff; }
+    #demo-code .n { color: #f78c6c; } #demo-code .c { color: #5d6675; }
+    .progress { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; }
+    .progress i { display: block; height: 100%; width: 0; background: #7c6cf7; transition: width .3s ease, opacity .4s; }
+
+    /* The generated apps, rendered for real inside the preview */
+    .app { width: 100%; max-width: 360px; background: #fff; color: #111827; border: 1px solid #e5e7eb; border-radius: 14px; padding: 20px; box-shadow: 0 10px 30px -12px rgba(17,24,39,.25); font-size: 14px; }
+    .app h4 { margin: 0 0 2px; font-size: 16px; }
+    .app .sub { color: #6b7280; font-size: 12.5px; margin: 0 0 16px; }
+    .app label { display: flex; justify-content: space-between; font-size: 12.5px; color: #374151; margin: 12px 0 6px; font-weight: 500; }
+    .app input[type=number], .app input[type=text] { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font: inherit; color: #111827; background: #fff; }
+    .app input[type=range] { width: 100%; accent-color: #5a48e8; }
+    .app .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .app .stepper { display: flex; align-items: center; gap: 10px; }
+    .app button.b { border: 1px solid #d1d5db; background: #fff; border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; color: #111827; }
+    .app button.p { background: #111827; color: #fff; border-color: #111827; }
+    .app .total { margin-top: 16px; padding-top: 14px; border-top: 1px solid #f0f1f3; display: grid; gap: 6px; }
+    .app .total .big { font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+    .app .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 6px; }
+    .app .day { aspect-ratio: 1; border-radius: 8px; border: 1px solid #e5e7eb; background: #f9fafb; display: grid; place-items: center; font-size: 11px; color: #6b7280; cursor: pointer; transition: background .2s, color .2s, transform .15s; }
+    .app .day.on { background: #5a48e8; border-color: #5a48e8; color: #fff; }
+    .app .day:active { transform: scale(.94); }
+    .app .habit { margin-top: 14px; }
+    .app .streak { font-size: 12.5px; color: #6b7280; }
+    .app ul { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+    .app li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #f0f1f3; border-radius: 8px; animation: rise .3s ease; }
+    .app li.done span { text-decoration: line-through; color: #9ca3af; }
+    .app li input { accent-color: #5a48e8; }
+
+    .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 18px; }
+    .chip-btn {
+      border: 1px solid var(--line); background: var(--bg); color: var(--muted); border-radius: 999px;
+      padding: 7px 14px; font: inherit; font-size: 13.5px; cursor: pointer; transition: color .2s, border-color .2s, background .2s;
+    }
+    .chip-btn:hover { color: var(--text); border-color: var(--muted); }
+    .chip-btn[aria-pressed="true"] { color: var(--text); border-color: var(--accent); background: var(--surface); }
+
+    @media (max-width: 720px) {
+      .win-body { grid-template-columns: 1fr; height: auto; }
+      .chat { border-right: 0; border-bottom: 1px solid #222833; }
+      .msgs { display: none; }
+      .composer { margin: 12px; min-height: 0; }
+      .panes { height: 460px; flex: none; }
+      .preview-pane { padding: 14px; }
+      .model-pill { font-size: 11px; }
+      .mp-name { display: none; }
+      .win-title { display: none; }
+      #demo-code { font-size: 11px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .demo *, .demo *::before, .demo *::after { animation: none !important; transition: none !important; }
     }
 
     /* Quantization visual */
@@ -202,8 +315,39 @@
       <p class="meta">Apple Silicon · macOS 13 or later · Free</p>
     </header>
 
-    <div class="shot">
-      <img src="screenshot.jpg" width="1600" height="1029" alt="Jemero showing the models that fit this Mac, with the best one marked" />
+    <div class="demo" id="demo">
+      <div class="win" aria-label="Jemero building an app from a prompt">
+        <div class="win-bar">
+          <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="win-title">Jemero</span>
+          <span class="model-pill"><span class="live-dot"></span><span class="mp-name">Qwen2.5-Coder 14B · </span>4-bit · <b>24 tok/s</b></span>
+        </div>
+        <div class="win-body">
+          <aside class="chat">
+            <div class="msgs" id="demo-msgs"></div>
+            <div class="composer"><span id="demo-typed"></span><span class="caret"></span></div>
+          </aside>
+          <div class="work">
+            <div class="work-bar">
+              <div class="tabs2" id="demo-tabs" data-tab="code">
+                <span class="tabs2-pill"></span>
+                <button type="button" data-tab="code">Code</button>
+                <button type="button" data-tab="preview">Preview</button>
+              </div>
+              <span class="status" id="demo-status"><span class="status-dot"></span><span id="demo-status-text">Idle</span></span>
+            </div>
+            <div class="panes">
+              <div class="pane code-pane">
+                <div class="file-tab">src/App.jsx</div>
+                <pre id="demo-code"></pre>
+              </div>
+              <div class="pane preview-pane"><div id="demo-preview"></div></div>
+            </div>
+            <div class="progress"><i id="demo-bar"></i></div>
+          </div>
+        </div>
+      </div>
+      <div class="chips" id="demo-chips" role="group" aria-label="Examples"></div>
     </div>
 
     <div class="quant">
@@ -296,5 +440,251 @@
       </nav>
     </footer>
   </div>
+  <script>
+  // The hero demo: a small, honest re-enactment of what Jemero does — a prompt
+  // is typed, the model streams the file, it installs, and the generated app
+  // appears in the preview and actually works. No libraries.
+  (() => {
+    const root = document.getElementById('demo')
+    if (!root) return
+    const $ = (id) => document.getElementById(id)
+    const msgs = $('demo-msgs'), typed = $('demo-typed'), code = $('demo-code')
+    const preview = $('demo-preview'), tabs = $('demo-tabs'), bar = $('demo-bar')
+    const status = $('demo-status'), statusText = $('demo-status-text'), chips = $('demo-chips')
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    const TOKEN = /(\/\/.*$)|('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*")|\b(import|from|export|default|function|return|const|let)\b|(<\/?[A-Za-z][\w.]*)|\b(\d+(?:\.\d+)?)\b/gm
+    function highlight(src) {
+      let out = '', last = 0
+      src.replace(TOKEN, (m, com, str, kw, tag, num, i) => {
+        out += esc(src.slice(last, i))
+        const cls = com ? 'c' : str ? 's' : kw ? 'k' : tag ? 't' : 'n'
+        out += `<span class="${cls}">${esc(m)}</span>`
+        last = i + m.length
+        return m
+      })
+      return out + esc(src.slice(last))
+    }
+
+    const money = (n) => '$' + n.toFixed(2)
+    const DEMOS = [
+      {
+        label: 'Tip calculator',
+        prompt: 'A tip calculator with a bill amount, tip slider and per-person split',
+        reply: 'Here’s a tip calculator — drag the slider.',
+        code: `import { useState } from 'react'
+import { Card, CardContent } from './components/ui/card.jsx'
+import { Slider } from './components/ui/slider.jsx'
+
+export default function App() {
+  const [bill, setBill] = useState(84)
+  const [tip, setTip] = useState(18)
+  const [people, setPeople] = useState(2)
+  const total = bill * (1 + tip / 100)
+
+  return (
+    <Card className="w-full max-w-sm">
+      <CardContent className="space-y-4">
+        <Slider value={[tip]} onValueChange={([v]) => setTip(v)} />
+        <p className="text-2xl font-bold">{(total / people).toFixed(2)}</p>
+      </CardContent>
+    </Card>
+  )
+}`,
+        render(el) {
+          el.innerHTML = `<div class="app"><h4>Tip calculator</h4><p class="sub">Split the bill fairly.</p>
+            <label>Bill</label><input type="number" value="84" min="0" data-k="bill">
+            <label>Tip <span data-o="tip">18%</span></label><input type="range" min="0" max="30" value="18" data-k="tip">
+            <div class="row" style="margin-top:12px"><span style="font-size:12.5px;color:#374151;font-weight:500">People</span>
+              <div class="stepper"><button class="b" data-d="-1">−</button><b data-o="people">2</b><button class="b" data-d="1">+</button></div></div>
+            <div class="total"><div class="row"><span class="sub" style="margin:0">Tip</span><b data-o="tipAmt"></b></div>
+              <div class="row"><span class="sub" style="margin:0">Each person</span><span class="big" data-o="each"></span></div></div></div>`
+          const s = { bill: 84, tip: 18, people: 2 }
+          const out = (k, v) => (el.querySelector(`[data-o="${k}"]`).textContent = v)
+          const paint = () => {
+            const tipAmt = (s.bill * s.tip) / 100
+            out('tip', s.tip + '%'); out('people', s.people)
+            out('tipAmt', money(tipAmt)); out('each', money((s.bill + tipAmt) / s.people))
+          }
+          el.addEventListener('input', (e) => { const k = e.target.dataset.k; if (k) { s[k] = Math.max(0, Number(e.target.value) || 0); paint() } })
+          el.addEventListener('click', (e) => { const d = Number(e.target.dataset.d); if (d) { s.people = Math.min(20, Math.max(1, s.people + d)); paint() } })
+          paint()
+          return (t) => { s.tip = Math.round(12 + 8 * (0.5 + 0.5 * Math.sin(t / 900))); el.querySelector('[data-k="tip"]').value = s.tip; paint() }
+        },
+      },
+      {
+        label: 'Habit tracker',
+        prompt: 'A habit tracker with a weekly grid and a streak counter',
+        reply: 'Done — tap a day to check it off.',
+        code: `import { useState } from 'react'
+import { Card, CardHeader, CardTitle } from './components/ui/card.jsx'
+import { Flame } from 'lucide-react'
+
+const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+
+export default function App() {
+  const [done, setDone] = useState([1, 1, 0, 1, 1, 1, 0])
+  const streak = done.lastIndexOf(0) === 6 ? 0 : 5
+  const toggle = (i) =>
+    setDone((d) => d.map((v, j) => (j === i ? 1 - v : v)))
+
+  return (
+    <Card className="w-full max-w-sm">
+      <CardHeader><CardTitle>Read 20 minutes</CardTitle></CardHeader>
+      {DAYS.map((d, i) => <button key={i} onClick={() => toggle(i)}>{d}</button>)}
+    </Card>
+  )
+}`,
+        render(el) {
+          const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+          const on = [1, 1, 0, 1, 1, 1, 0]
+          el.innerHTML = `<div class="app"><h4>Habits</h4><p class="sub">This week</p>
+            ${['Read 20 minutes', 'Walk 8k steps'].map((h, r) => `<div class="habit"><div class="row"><b style="font-size:13.5px">${h}</b><span class="streak" data-s="${r}"></span></div>
+            <div class="days">${days.map((d, i) => `<div class="day" data-r="${r}" data-i="${i}">${d}</div>`).join('')}</div></div>`).join('')}</div>`
+          const grid = [on.slice(), [1, 0, 1, 1, 0, 1, 1]]
+          const paint = () => grid.forEach((row, r) => {
+            row.forEach((v, i) => el.querySelector(`[data-r="${r}"][data-i="${i}"]`).classList.toggle('on', !!v))
+            let run = 0; for (const v of row) run = v ? run + 1 : 0
+            el.querySelector(`[data-s="${r}"]`).textContent = `🔥 ${Math.max(...row.reduce((a, v) => (a.push(v ? (a.at(-1) || 0) + 1 : 0), a), []))} day streak`
+          })
+          el.addEventListener('click', (e) => { const d = e.target.dataset; if (d.i !== undefined) { grid[d.r][d.i] ^= 1; paint() } })
+          paint()
+          let k = 0
+          return (t) => { if (Math.floor(t / 700) !== k) { k = Math.floor(t / 700); const i = k % 7; grid[0][i] ^= 1; paint() } }
+        },
+      },
+      {
+        label: 'Todo list',
+        prompt: 'A clean todo list where I can add and check off tasks',
+        reply: 'Here you go — add a task and press Enter.',
+        code: `import { useState } from 'react'
+import { Input } from './components/ui/input.jsx'
+import { Button } from './components/ui/button.jsx'
+
+export default function App() {
+  const [items, setItems] = useState([])
+  const [text, setText] = useState('')
+
+  const add = () => {
+    if (!text.trim()) return
+    setItems((l) => [...l, { text, done: false }])
+    setText('')
+  }
+
+  return (
+    <div className="mx-auto max-w-sm space-y-3">
+      <Input value={text} onChange={(e) => setText(e.target.value)} />
+      <Button onClick={add}>Add</Button>
+    </div>
+  )
+}`,
+        render(el) {
+          el.innerHTML = `<div class="app"><h4>Today</h4><p class="sub"><span data-o="left"></span> left</p>
+            <div class="row"><input type="text" placeholder="Add a task…" data-k="t"><button class="b p" data-add>Add</button></div><ul></ul></div>`
+          const list = el.querySelector('ul'), input = el.querySelector('[data-k="t"]')
+          const left = () => (el.querySelector('[data-o="left"]').textContent = list.querySelectorAll('li:not(.done)').length)
+          const add = (text, done = false) => {
+            if (!text.trim()) return
+            const li = document.createElement('li')
+            li.innerHTML = `<input type="checkbox" ${done ? 'checked' : ''}><span></span>`
+            li.querySelector('span').textContent = text
+            li.classList.toggle('done', done)
+            li.querySelector('input').addEventListener('change', (e) => { li.classList.toggle('done', e.target.checked); left() })
+            list.appendChild(li); left()
+          }
+          el.querySelector('[data-add]').addEventListener('click', () => { add(input.value); input.value = '' })
+          input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { add(input.value); input.value = '' } })
+          ;['Ship Jemero 0.1', 'Reply to Sam'].forEach((t, i) => add(t, i === 0))
+          const queue = ['Buy oat milk', 'Book dentist']
+          let n = 0
+          return (t) => { if (n < queue.length && t > 900 + n * 1400) add(queue[n++]) }
+        },
+      },
+    ]
+
+    // One run at a time; starting a new one cancels whatever was playing.
+    let run = 0, current = 0, autoplay = true, visible = false, tick = null
+    const sleep = (ms, id) => new Promise((res, rej) => setTimeout(() => (id === run ? res() : rej('cancel')), ms))
+
+    const setStatus = (text, state) => { statusText.textContent = text; status.className = 'status ' + (state || '') }
+    const setTab = (t) => { tabs.dataset.tab = t; root.classList.toggle('show-preview', t === 'preview') }
+    tabs.addEventListener('click', (e) => { const t = e.target.dataset.tab; if (t) { setTab(t); stopAuto() } })
+
+    function stopAuto() { autoplay = false; if (tick) { cancelAnimationFrame(tick); tick = null } }
+    root.addEventListener('pointerdown', (e) => { if (e.target.closest('.preview-pane')) stopAuto() })
+
+    DEMOS.forEach((d, i) => {
+      const b = document.createElement('button')
+      b.type = 'button'; b.className = 'chip-btn'; b.textContent = d.label
+      b.addEventListener('click', () => { autoplay = false; play(i) })
+      chips.appendChild(b)
+    })
+    const markChip = (i) => [...chips.children].forEach((b, j) => b.setAttribute('aria-pressed', String(i === j)))
+
+    function showFinal(i) {
+      const d = DEMOS[i]
+      msgs.innerHTML = `<div class="msg user"></div><div class="msg bot"></div>`
+      msgs.children[0].textContent = d.prompt; msgs.children[1].textContent = d.reply
+      typed.textContent = ''; code.innerHTML = highlight(d.code)
+      d.render(preview); setTab('preview'); setStatus('Ready', 'done'); markChip(i)
+    }
+
+    async function play(i) {
+      const id = ++run
+      current = i
+      if (tick) { cancelAnimationFrame(tick); tick = null }
+      const d = DEMOS[i]
+      markChip(i)
+      try {
+        if (reduced) return showFinal(i)
+        msgs.innerHTML = ''; code.innerHTML = ''; preview.innerHTML = ''; typed.textContent = ''
+        bar.style.opacity = 1; bar.style.width = '0%'
+        setTab('code'); setStatus('Idle')
+        await sleep(400, id)
+        for (const ch of d.prompt) { typed.textContent += ch; await sleep(24 + Math.random() * 30, id) }
+        await sleep(350, id)
+        typed.textContent = ''
+        const m = document.createElement('div'); m.className = 'msg user'; m.textContent = d.prompt; msgs.appendChild(m)
+        setStatus('Thinking…', 'busy'); bar.style.width = '12%'
+        await sleep(700, id)
+        // Stream the file a few characters at a time, like tokens arriving.
+        let shown = 0, tokens = 0
+        while (shown < d.code.length) {
+          shown = Math.min(d.code.length, shown + 6 + Math.floor(Math.random() * 10))
+          tokens += 3
+          code.innerHTML = highlight(d.code.slice(0, shown)) + '<span class="caret"></span>'
+          setStatus(`Writing · ${tokens} tokens`, 'busy')
+          bar.style.width = 12 + (shown / d.code.length) * 60 + '%'
+          await sleep(28, id)
+        }
+        code.innerHTML = highlight(d.code)
+        setStatus('Installing…', 'busy'); bar.style.width = '88%'
+        await sleep(800, id)
+        const r = document.createElement('div'); r.className = 'msg bot'; r.textContent = d.reply; msgs.appendChild(r)
+        bar.style.width = '100%'; setStatus('Ready', 'done')
+        const animate = d.render(preview)
+        await sleep(250, id)
+        setTab('preview'); bar.style.opacity = 0
+        // Let the app move on its own for a moment, unless someone takes over.
+        const t0 = performance.now()
+        const loop = (now) => { if (!autoplay || id !== run) return; animate && animate(now - t0); tick = requestAnimationFrame(loop) }
+        tick = requestAnimationFrame(loop)
+        await sleep(6500, id)
+        if (autoplay && visible) play((i + 1) % DEMOS.length)
+        else if (autoplay) waiting = true
+      } catch (e) { if (e !== 'cancel') throw e }
+    }
+
+    // Only animate while on screen; pick up where it left off when scrolled back.
+    let waiting = false, started = false
+    new IntersectionObserver(([e]) => {
+      visible = e.isIntersecting
+      if (!visible) return
+      if (!started) { started = true; play(0) }
+      else if (waiting && autoplay) { waiting = false; play((current + 1) % DEMOS.length) }
+    }, { threshold: 0.35 }).observe(root)
+  })()
+  </script>
 </body>
 </html>

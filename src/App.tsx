@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { listModels, ping, streamChat, trimHistory, type ChatMessage } from './lib/atomic'
+import { listModels, ping, streamChat, trimHistory, type ChatMessage } from './lib/llm'
 import { parseArtifacts } from './lib/parser'
 import { BASE_DEPS, missingDeps } from './lib/deps'
 import { fixMissingImports } from './lib/imports'
