@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en" data-layout="center" data-bg="dots">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Canvas</title>
+    <script>
+      // A few bundled libraries still read process.env at runtime.
+      window.process = { env: { NODE_ENV: 'development' } }
+    </script>
+    <!-- Every package a component may import, bundled locally by scripts/kits.mjs. -->
+    <script type="importmap">/*IMPORTMAP*/</script>
+    <style>
+      /* Unlayered on purpose: these beat Tailwind's preflight and the kits'
+         global styles, and only touch the canvas, never the component. */
+      html { color-scheme: light; --jm-pattern: rgba(15, 23, 42, 0.09); --jm-label: rgba(15, 23, 42, 0.45); }
+      html.dark { color-scheme: dark; --jm-pattern: rgba(255, 255, 255, 0.07); --jm-label: rgba(255, 255, 255, 0.45); }
+      html, body { margin: 0; }
+      body { min-height: 100vh; }
+      html[data-bg='dots'] body {
+        background-image: radial-gradient(circle, var(--jm-pattern) 1px, transparent 1.3px);
+        background-size: 18px 18px;
+      }
+      html[data-bg='grid'] body {
+        background-image: linear-gradient(var(--jm-pattern) 1px, transparent 1px),
+          linear-gradient(90deg, var(--jm-pattern) 1px, transparent 1px);
+        background-size: 24px 24px;
+      }
+
+      #jm-root { box-sizing: border-box; min-height: 100vh; }
+      html[data-layout='center'] #jm-root {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 24px; padding: 56px 32px;
+      }
+      html[data-layout='fill'] #jm-root { display: block; }
+
+      .jm-grid {
+        display: grid; width: 100%; max-width: 1100px; gap: 44px 36px; align-items: start;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+      }
+      html[data-layout='fill'] .jm-grid { max-width: none; grid-template-columns: 1fr; gap: 0; }
+      .jm-cell { display: flex; flex-direction: column; align-items: center; gap: 14px; min-width: 0; }
+      html[data-layout='fill'] .jm-cell { align-items: stretch; gap: 0; }
+      .jm-label {
+        align-self: flex-start; font: 600 10.5px/1.2 ui-sans-serif, system-ui, -apple-system, sans-serif;
+        letter-spacing: 0.06em; text-transform: uppercase; color: var(--jm-label);
+      }
+      html[data-layout='fill'] .jm-label { padding: 18px 20px 8px; }
+
+      .jm-error {
+        box-sizing: border-box; max-width: min(640px, 100%); margin: 0 auto;
+        border: 1px solid rgba(248, 81, 73, 0.55); background: rgba(248, 81, 73, 0.08);
+        color: #d1242f; border-radius: 10px; padding: 12px 14px;
+        font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word;
+      }
+      html.dark .jm-error { color: #ffb4b0; }
+      .jm-error strong { display: block; font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 4px; }
+    </style>
+  </head>
+  <body>
+    <div id="jm-root"></div>
+    <script type="module" src="./stage.js"></script>
+  </body>
+</html>
