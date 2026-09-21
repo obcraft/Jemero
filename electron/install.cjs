@@ -13,7 +13,7 @@ const { Readable, Transform } = require('node:stream')
 const { pipeline } = require('node:stream/promises')
 const { appSupport } = require('./runtime.cjs')
 
-const modelsRoot = () => process.env.ATOMIC_MODELS ?? path.join(appSupport(), 'models')
+const modelsRoot = () => process.env.JEMERO_MODELS ?? path.join(appSupport(), 'models')
 const modelDir = (id) => path.join(modelsRoot(), ...id.split('/'))
 const ggufPath = (id) => path.join(modelDir(id), 'model.gguf')
 
@@ -162,7 +162,7 @@ async function acquireLock(dir) {
     if (pid && pid !== process.pid) {
       try {
         process.kill(pid, 0)
-        throw new Error('This model is already downloading in another Atomic Lovable window.')
+        throw new Error('This model is already downloading in another Jemero window.')
       } catch (err) {
         if (err.code !== 'ESRCH') throw err // alive → refuse; ESRCH → stale lock, take it
       }

@@ -18,7 +18,7 @@ const { ensureRuntime, appSupport } = require('./runtime.cjs')
 
 // Our own port. 1337 is Atomic Chat's; sharing it is how two apps end up
 // talking to each other's models.
-const URL_BASE = process.env.ATOMIC_URL ?? 'http://127.0.0.1:8757'
+const URL_BASE = process.env.JEMERO_URL ?? 'http://127.0.0.1:8757'
 const PORT = Number(new global.URL(URL_BASE).port || 8757)
 
 const statePath = () => path.join(appSupport(), 'server.json')
@@ -94,7 +94,7 @@ async function choose() {
   const byId = new Map(models.map((m) => [m.modelId, m]))
 
   const order = [
-    process.env.ATOMIC_MODEL,
+    process.env.JEMERO_MODEL,
     readState().chosen,
     recommended,
     ...[...local].sort((a, b) => (byId.get(b)?.score ?? 0) - (byId.get(a)?.score ?? 0)),
@@ -102,7 +102,7 @@ async function choose() {
 
   const id = order.find((candidate) => local.includes(candidate)) ?? null
   const plan = id ? byId.get(id) ?? planFor(id, device) : null
-  return { id, ctx: plan?.ctx ?? Number(process.env.ATOMIC_CTX ?? TARGET_CTX), recommended, installed: local, plan }
+  return { id, ctx: plan?.ctx ?? Number(process.env.JEMERO_CTX ?? TARGET_CTX), recommended, installed: local, plan }
 }
 
 /** Stop the server we started. Falls back to whatever llama-server holds our port. */

@@ -2,8 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 // The built-in llama.cpp server (electron/model.cjs) speaks the OpenAI API on
-// 127.0.0.1:8757 — override with ATOMIC_URL.
-const ATOMIC = process.env.ATOMIC_URL ?? 'http://127.0.0.1:8757'
+// 127.0.0.1:8757 — override with JEMERO_URL.
+const ATOMIC = process.env.JEMERO_URL ?? 'http://127.0.0.1:8757'
 
 export default defineConfig({
   plugins: [react()],

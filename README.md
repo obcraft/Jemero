@@ -1,4 +1,4 @@
-# Atomic Lovable
+# Jemero
 
 A minimal Lovable/bolt.new clone, running as a **native macOS app**. You describe an
 app, a **local** model writes it, and it gets installed and run in a **WebContainer**
@@ -26,7 +26,7 @@ prompt ──► llama-server (built in, Metal)  ──► <file> blocks ──�
 - **`electron/hardware.cjs`** + **`electron/catalog.cjs`** — read the Mac (chip, unified
   memory, GPU cores, memory bandwidth) and rank 15 verified models for it.
 - **`electron/install.cjs`** — the model store: resumable downloads from Hugging Face
-  into `~/Library/Application Support/Atomic Lovable/models`.
+  into `~/Library/Application Support/Jemero/models`.
 - **`src/lib/atomic.ts`** — streaming OpenAI-compatible client. Strips `<think>` blocks
   so reasoning models don't corrupt the file parser.
 - **`src/lib/parser.ts`** — pulls `<file path="…">` and `<install>` blocks out of the
@@ -61,7 +61,7 @@ nothing downloaded yet it opens on the model list instead.
 
 Closing the window quits the app and stops the model server, so the 10+ GB it holds goes
 back to macOS. Reopening reloads it — a few seconds while the file is still in the page
-cache. Set `ATOMIC_KEEP_WARM=1` to keep it loaded between launches instead.
+cache. Set `JEMERO_KEEP_WARM=1` to keep it loaded between launches instead.
 
 | script | |
 |---|---|
@@ -69,7 +69,7 @@ cache. Set `ATOMIC_KEEP_WARM=1` to keep it loaded between launches instead.
 | `npm run models` | what this Mac should run, and why (`--priority speed\|quality`, `--json`) |
 | `npm run models:install` | download the recommendation (`-- --install <id>` for another) |
 | `npm run serve` / `npm run stop` | start / stop the model server without the window |
-| `npm run dist` | build `release/Atomic Lovable-<version>-arm64.dmg` |
+| `npm run dist` | build `release/Jemero-<version>-arm64.dmg` |
 | `npm run runtime` | re-vendor the llama.cpp runtime into `vendor/llama` |
 
 Shortcuts: **⌘L** models, **⌘,** settings, **⌘↵** generate, **Esc** stop.
@@ -162,7 +162,7 @@ about stray markdown fences and single quotes, because small models produce both
 
 ## Install (as a user)
 
-1. Download `Atomic Lovable-<version>-arm64.dmg`, open it, drag the app to **Applications**.
+1. Download `Jemero-<version>-arm64.dmg`, open it, drag the app to **Applications**.
 2. Open it. First launch of an ad-hoc signed build: macOS blocks it once — go to
    **System Settings → Privacy & Security → Open Anyway**. (A Developer ID build, below,
    skips this entirely.)
@@ -173,7 +173,7 @@ about stray markdown fences and single quotes, because small models produce both
 ## Packaging
 
 ```bash
-npm run dist     # → release/Atomic Lovable-0.1.0-arm64.dmg  (~107 MB)
+npm run dist     # → release/Jemero-arm64.dmg  (~107 MB)
 ```
 
 The app carries `llama-server` and its Metal libraries in `Contents/Resources/llama`,
@@ -192,21 +192,33 @@ runtime with the entitlements in `build/entitlements.mac.plist`.
 To move to a newer llama.cpp, bump `BUILD` in `electron/runtime.cjs` and run
 `npm run runtime`.
 
+## Publishing
+
+- **Download link.** The landing page and README point at
+  `https://github.com/obcraft/jemero/releases/latest/download/Jemero-arm64.dmg`. The
+  file name has no version in it on purpose, so that link keeps working: create a GitHub
+  Release and attach `release/Jemero-arm64.dmg` to it.
+  `gh release create v0.1.0 release/Jemero-arm64.dmg --title "Jemero 0.1.0"` does both.
+- **Landing page.** `docs/index.html` is a self-contained static page (no build step).
+  Turn it on under the repo's *Settings → Pages → Deploy from a branch → main → /docs*;
+  it's then served at `https://obcraft.github.io/jemero/`.
+- **DMG window.** `npm run dmg:background` redraws `build/background.png` (+ `@2x`).
+
 ## Environment overrides
 
 | variable | default | |
 |---|---|---|
-| `ATOMIC_MODEL` | your last pick, else the recommendation | serve this model id at startup |
-| `ATOMIC_URL` | `http://127.0.0.1:8757` | where the model server listens |
-| `ATOMIC_HOME` | `~/Library/Application Support/Atomic Lovable` | models, runtime cache, logs |
-| `ATOMIC_LLAMA_BIN` | the bundled runtime | use your own `llama-server` build |
-| `ATOMIC_DEV_PORT` | a free port | pin the dev server |
-| `ATOMIC_OPEN` | — | `models` or `settings`: open straight onto that panel |
-| `ATOMIC_THEME` | the OS | `light` or `dark` for this run |
-| `ATOMIC_CAPTURE` | — | write a PNG of the window once loaded |
-| `ATOMIC_KEEP_WARM` | — | `1`: leave the model loaded after quitting |
+| `JEMERO_MODEL` | your last pick, else the recommendation | serve this model id at startup |
+| `JEMERO_URL` | `http://127.0.0.1:8757` | where the model server listens |
+| `JEMERO_HOME` | `~/Library/Application Support/Jemero` | models, runtime cache, logs |
+| `JEMERO_LLAMA_BIN` | the bundled runtime | use your own `llama-server` build |
+| `JEMERO_DEV_PORT` | a free port | pin the dev server |
+| `JEMERO_OPEN` | — | `models` or `settings`: open straight onto that panel |
+| `JEMERO_THEME` | the OS | `light` or `dark` for this run |
+| `JEMERO_CAPTURE` | — | write a PNG of the window once loaded |
+| `JEMERO_KEEP_WARM` | — | `1`: leave the model loaded after quitting |
 
-Server log: `~/Library/Application Support/Atomic Lovable/logs/llama-server.log`.
+Server log: `~/Library/Application Support/Jemero/logs/llama-server.log`.
 
 ## One window only
 

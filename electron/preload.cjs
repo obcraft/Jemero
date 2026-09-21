@@ -7,7 +7,12 @@ const { contextBridge, ipcRenderer } = require('electron')
 
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args)
 
-contextBridge.exposeInMainWorld('atomic', {
+contextBridge.exposeInMainWorld('jemero', {
+  /** User settings, persisted by the main process (see registerSettingsIpc). */
+  settings: {
+    load: () => ipcRenderer.sendSync('settings:load'),
+    save: (value) => ipcRenderer.send('settings:save', value),
+  },
   /** Machine profile: chip, unified memory, GPU cores, bandwidth, model budget. */
   device: () => invoke('models:device'),
   /** Catalog scored for this machine, plus what's installed and what's serving. */

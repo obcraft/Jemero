@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Atomic Lovable</title>
+    <title>Jemero</title>
     <style>
       /* Painted before the bundle runs, so the first frame isn't a white flash.
          lib/settings.ts takes over once React mounts. */
@@ -13,7 +13,9 @@
     <script>
       // Read the stored theme early for the same reason.
       try {
-        var s = JSON.parse(localStorage.getItem('atomic.settings.v1') || '{}')
+        // The Mac app's preload exposes the saved settings before this runs.
+        var s = (window.jemero && window.jemero.settings.load()) ||
+          JSON.parse(localStorage.getItem('jemero.settings.v1') || '{}')
         var t = s.theme === 'light' || s.theme === 'dark'
           ? s.theme
           : matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'

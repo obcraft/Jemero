@@ -27,7 +27,34 @@ const assetUrl = () => `${REPO}/${BUILD}/${assetName()}`
 
 /** Our own application-support directory — not Atomic Chat's. */
 function appSupport() {
-  return process.env.ATOMIC_HOME ?? path.join(os.homedir(), 'Library/Application Support/Atomic Lovable')
+  const home = process.env.JEMERO_HOME ?? path.join(os.homedir(), 'Library/Application Support/Jemero')
+  migrateFromOldName(home)
+  return home
+}
+
+/**
+ * The app used to be called Atomic Lovable, and kept its models, runtime and
+ * state under that name. Move them across once, so a rename doesn't strand
+ * gigabytes of downloads. Per item, because Electron creates the new folder
+ * itself on launch and it may already exist.
+ */
+let migrated = false
+function migrateFromOldName(home) {
+  if (migrated || process.env.JEMERO_HOME) return
+  migrated = true
+  const old = path.join(os.homedir(), 'Library/Application Support/Atomic Lovable')
+  if (!fs.existsSync(old)) return
+  fs.mkdirSync(home, { recursive: true })
+  for (const name of ['models', 'runtime', 'logs', 'server.json', 'settings.json']) {
+    const from = path.join(old, name)
+    const to = path.join(home, name)
+    if (!fs.existsSync(from) || fs.existsSync(to)) continue
+    try {
+      fs.renameSync(from, to)
+    } catch {
+      /* in use or cross-volume — leave it; the app still works */
+    }
+  }
 }
 
 const cacheDir = () => path.join(appSupport(), 'runtime')
@@ -36,7 +63,7 @@ const vendorDir = () => path.join(__dirname, '..', 'vendor', 'llama')
 /** Every directory that might hold llama-server, best first. */
 function candidates() {
   const roots = []
-  if (process.env.ATOMIC_LLAMA_BIN) return [path.dirname(process.env.ATOMIC_LLAMA_BIN)]
+  if (process.env.JEMERO_LLAMA_BIN) return [path.dirname(process.env.JEMERO_LLAMA_BIN)]
   if (process.resourcesPath) roots.push(path.join(process.resourcesPath, 'llama'))
   roots.push(vendorDir(), cacheDir())
   // The tarball unpacks into llama-<build>/, so look one level down as well.

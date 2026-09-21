@@ -128,7 +128,7 @@ export default function App() {
   // ⌘L and ⌘, from the macOS menu bar.
   useEffect(
     () =>
-      window.atomic?.onMenu((which) => {
+      window.jemero?.onMenu((which) => {
         if (which === 'models') setBrowserOpen(true)
         else setSettingsOpen(true)
       }),
@@ -421,7 +421,7 @@ export default function App() {
         <div className="brand">
           <span className="logo">⬢</span>
           <div>
-            <strong>Atomic Lovable</strong>
+            <strong>Jemero</strong>
             <span className="sub">prompt → app, on a local model</span>
           </div>
         </div>

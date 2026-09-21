@@ -71,6 +71,7 @@ export type Progress = {
 }
 
 type Bridge = {
+  settings: { load(): unknown; save(value: unknown): void }
   device(): Promise<Device>
   catalog(priority?: Priority): Promise<CatalogSnapshot>
   install(modelId: string): Promise<{ ok: boolean; reason?: string }>
@@ -83,12 +84,12 @@ type Bridge = {
 
 declare global {
   interface Window {
-    atomic?: Bridge
+    jemero?: Bridge
   }
 }
 
-export const bridge = () => window.atomic ?? null
-export const available = () => !!window.atomic
+export const bridge = () => window.jemero ?? null
+export const available = () => !!window.jemero
 
 // --- shared snapshot ------------------------------------------------------
 // Both the header's quick-switch and the full browser read the same catalog,

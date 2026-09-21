@@ -17,9 +17,9 @@ app.commandLine.appendSwitch('enable-features', 'ThirdPartyStoragePartitioning')
 
 const isDev = !app.isPackaged
 
-// ATOMIC_THEME=light|dark overrides the OS for this run — the renderer's
+// JEMERO_THEME=light|dark overrides the OS for this run — the renderer's
 // 'System' setting follows nativeTheme, so both themes can be checked on one Mac.
-if (['light', 'dark'].includes(process.env.ATOMIC_THEME)) nativeTheme.themeSource = process.env.ATOMIC_THEME
+if (['light', 'dark'].includes(process.env.JEMERO_THEME)) nativeTheme.themeSource = process.env.JEMERO_THEME
 
 let win = null
 let vite = null
@@ -79,7 +79,7 @@ function showBootScreen(message) {
       animation:p 1.2s ease-in-out infinite}
     @keyframes p{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
     @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-  </style><div class="w"><div class="l">⬢</div><div class="t">Atomic Lovable</div>
+  </style><div class="w"><div class="l">⬢</div><div class="t">Jemero</div>
   <div class="m">${message}</div><div class="d"></div></div>`
   win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
 }
@@ -172,6 +172,32 @@ function emit(payload) {
  * — reading hardware, writing into the model store, restarting the
  * llama.cpp server — so the renderer only ever sees plain JSON.
  */
+/**
+ * Settings live in a file, not the renderer's localStorage: the UI is served
+ * from a fresh port each launch, localStorage is keyed by origin (port
+ * included), so anything stored there was quietly lost on every restart.
+ */
+function registerSettingsIpc() {
+  const file = path.join(runtime.appSupport(), 'settings.json')
+  // Synchronous on purpose: the renderer needs them before its first paint,
+  // or it flashes the wrong theme. It's one small file, read once.
+  ipcMain.on('settings:load', (e) => {
+    try {
+      e.returnValue = JSON.parse(require('node:fs').readFileSync(file, 'utf8'))
+    } catch {
+      e.returnValue = null
+    }
+  })
+  ipcMain.on('settings:save', (_e, value) => {
+    try {
+      require('node:fs').mkdirSync(path.dirname(file), { recursive: true })
+      require('node:fs').writeFileSync(file, JSON.stringify(value, null, 2) + '\n')
+    } catch {
+      /* disk full or read-only — keep running on in-memory settings */
+    }
+  })
+}
+
 function registerModelIpc() {
   ipcMain.handle('models:device', () => ({ ...detect(), summary: describe() }))
 
@@ -230,6 +256,7 @@ function registerModelIpc() {
 
 async function bootstrap() {
   buildMenu()
+  registerSettingsIpc()
   registerModelIpc()
   createWindow()
   showBootScreen('Starting…')
@@ -252,7 +279,7 @@ async function bootstrap() {
   let url
   if (isDev) {
     showBootScreen('Starting dev server…')
-    const port = process.env.ATOMIC_DEV_PORT ? Number(process.env.ATOMIC_DEV_PORT) : await freePort()
+    const port = process.env.JEMERO_DEV_PORT ? Number(process.env.JEMERO_DEV_PORT) : await freePort()
     const devUrl = `http://localhost:${port}`
     startVite(port)
     if (!(await waitForVite(devUrl))) {
@@ -266,18 +293,18 @@ async function bootstrap() {
 
   // Nothing downloaded yet: land on the model picker instead of an app that
   // can't answer, with the right model for this Mac already selected.
-  // ATOMIC_OPEN=models|settings opens straight onto that panel.
-  const open = result.needsModel ? 'models' : process.env.ATOMIC_OPEN
+  // JEMERO_OPEN=models|settings opens straight onto that panel.
+  const open = result.needsModel ? 'models' : process.env.JEMERO_OPEN
   win.loadURL(open === 'models' || open === 'settings' ? `${url}#${open}` : url)
 
-  // Dev affordance: ATOMIC_CAPTURE=<path> writes a PNG of the window contents
+  // Dev affordance: JEMERO_CAPTURE=<path> writes a PNG of the window contents
   // once loaded, so the UI can be checked without screen-recording permission.
-  if (process.env.ATOMIC_CAPTURE) {
+  if (process.env.JEMERO_CAPTURE) {
     win.webContents.once('did-finish-load', async () => {
       await sleep(5000)
       const img = await win.webContents.capturePage()
-      require('node:fs').writeFileSync(process.env.ATOMIC_CAPTURE, img.toPNG())
-      console.log(`captured -> ${process.env.ATOMIC_CAPTURE}`)
+      require('node:fs').writeFileSync(process.env.JEMERO_CAPTURE, img.toPNG())
+      console.log(`captured -> ${process.env.JEMERO_CAPTURE}`)
     })
   }
 }
@@ -286,7 +313,7 @@ async function bootstrap() {
 // database — which is exactly what WebContainer's preview runs on. Refuse the
 // second launch and focus the window that already exists.
 if (!app.requestSingleInstanceLock()) {
-  console.log('Atomic Lovable is already running — focusing that window.')
+  console.log('Jemero is already running — focusing that window.')
   app.quit()
 } else {
   app.on('second-instance', () => {
@@ -307,9 +334,9 @@ if (!app.requestSingleInstanceLock()) {
   // a few seconds while macOS still has the file in its page cache.
   // Registered only in the primary instance: a second launch quits at once,
   // and must not take the running window's model down with it.
-  // ATOMIC_KEEP_WARM=1 keeps it loaded between launches instead.
+  // JEMERO_KEEP_WARM=1 keeps it loaded between launches instead.
   app.on('before-quit', () => {
     vite?.kill('SIGINT')
-    if (!process.env.ATOMIC_KEEP_WARM) stopServing()
+    if (!process.env.JEMERO_KEEP_WARM) stopServing()
   })
 }

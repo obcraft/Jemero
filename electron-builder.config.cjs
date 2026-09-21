@@ -14,8 +14,8 @@ const notarize = developerId && Boolean(process.env.APPLE_ID && process.env.APPL
 const { BUILD } = require('./electron/runtime.cjs')
 
 module.exports = {
-  appId: 'app.atomic.lovable',
-  productName: 'Atomic Lovable',
+  appId: 'com.obcraft.jemero',
+  productName: 'Jemero',
   directories: { output: 'release', buildResources: 'build' },
   // The main process uses only node builtins, so nothing from node_modules ships.
   files: ['electron/**/*', 'dist/**/*', 'package.json'],
@@ -37,10 +37,16 @@ module.exports = {
     entitlementsInherit: developerId ? 'build/entitlements.mac.plist' : undefined,
     notarize,
   },
+  // A stable name, so the landing page's "latest release" link never changes:
+  // github.com/obcraft/jemero/releases/latest/download/Jemero-arm64.dmg
+  artifactName: '${productName}-${arch}.${ext}',
   dmg: {
-    title: 'Atomic Lovable',
-    window: { width: 540, height: 360 },
-    // The drag-to-install layout: the app on the left, Applications on the right.
+    title: 'Jemero',
+    // Drawn by scripts/dmg-background.cjs (+ @2x beside it); its arrow sits
+    // between the two icon positions below, so keep them in step.
+    background: 'build/background.png',
+    window: { width: 540, height: 380 },
+    iconSize: 96,
     contents: [
       { x: 140, y: 170, type: 'file' },
       { x: 400, y: 170, type: 'link', path: '/Applications' },

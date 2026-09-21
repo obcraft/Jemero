@@ -91,17 +91,32 @@ export const MEMORY_HINT: Record<Memory, string> = {
   long: 'More context, tighter fit — leave answers on Brief or Standard.',
 }
 
-const KEY = 'atomic.settings.v1'
+const KEY = 'jemero.settings.v1'
 
+/**
+ * In the Mac app, settings live in a file the main process owns — the page's
+ * origin changes every launch, so localStorage alone forgot everything on
+ * restart. localStorage remains the store for the browser build.
+ */
 function load(): Settings {
   try {
+    const fromApp = window.jemero?.settings.load() as Partial<Settings> | null | undefined
+    if (fromApp) return { ...DEFAULTS, ...fromApp }
     const raw = localStorage.getItem(KEY)
-    if (!raw) return DEFAULTS
-    const parsed = JSON.parse(raw) as Partial<Settings>
     // Merge over defaults so a new field in a later version doesn't read undefined.
-    return { ...DEFAULTS, ...parsed }
+    return raw ? { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Settings>) } : DEFAULTS
   } catch {
     return DEFAULTS
+  }
+}
+
+function persist(value: Settings | null) {
+  window.jemero?.settings.save(value ?? {})
+  try {
+    if (value) localStorage.setItem(KEY, JSON.stringify(value))
+    else localStorage.removeItem(KEY)
+  } catch {
+    /* private window, or storage full — the file copy still has it */
   }
 }
 
@@ -114,21 +129,13 @@ function emit() {
 
 export function setSettings(patch: Partial<Settings>) {
   current = { ...current, ...patch }
-  try {
-    localStorage.setItem(KEY, JSON.stringify(current))
-  } catch {
-    /* private window, or storage full — keep the in-memory value */
-  }
+  persist(current)
   emit()
 }
 
 export function resetSettings() {
   current = DEFAULTS
-  try {
-    localStorage.removeItem(KEY)
-  } catch {
-    /* ignore */
-  }
+  persist(null)
   emit()
 }
 
