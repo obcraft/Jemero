@@ -27,7 +27,7 @@ Local · Offline · Free
 <br/>
 
 Describe an app in one sentence. Jemero writes it with an AI model that runs **on your
-Mac**, installs it, and runs it live in the window — then you keep asking for changes in
+Mac**, installs it, and runs it live in the window. Then you keep asking for changes in
 plain words. No cloud, no account, no API key, nothing to set up.
 
 ## Highlights
@@ -35,7 +35,7 @@ plain words. No cloud, no account, no API key, nothing to set up.
 |  |  |
 |---|---|
 | **Built-in AI runtime** | llama.cpp ships inside the app and runs on the GPU. No terminal, no other apps. |
-| **Sized to your Mac** | Jemero reads your chip and memory and marks the best model that fits — already quantized for speed. |
+| **Sized to your Mac** | Jemero reads your chip and memory and marks the best model that fits, already quantized for speed. |
 | **One-click models** | 15 verified coding models. Downloads resume if interrupted and are checked against Hugging Face's SHA-256. |
 | **Live preview** | The generated app runs in a sandbox right in the window. Missing packages and imports are fixed for you. |
 | **Private** | Everything happens on your Mac. Nothing you type leaves it. |
@@ -45,10 +45,10 @@ plain words. No cloud, no account, no API key, nothing to set up.
 
 1. **[Download Jemero-arm64.dmg](https://github.com/obcraft/Jemero/releases/latest/download/Jemero-arm64.dmg)**, open it, and drag Jemero into **Applications**.
 2. Open Jemero. The first time, macOS asks once: go to **System Settings → Privacy & Security** and click **Open Anyway**.
-3. The model list opens with the best model for your Mac marked **Best**. Click **Get** — it downloads, starts, and drops you straight into the chat.
+3. The model list opens with the best model for your Mac marked **Best**. Click **Get**: it downloads, starts, and drops you straight into the chat.
 
 > [!NOTE]
-> Requires an Apple Silicon Mac (M1 or later) on macOS 13+. Models take 1.5–60 GB of disk space depending on size.
+> Requires an Apple Silicon Mac (M1 or later) on macOS 13+. Models take 1.5 to 60 GB of disk space depending on size.
 
 ## Powered by quantization
 
@@ -63,7 +63,7 @@ Jemero picks the level that fits your Mac's memory and still runs fast.
 | 16-bit (original) | 29.6 GB | ✗ |
 | 8-bit | 15.7 GB | ✓ |
 | 5-bit | 10.5 GB | ✓ |
-| **4-bit** | **9.0 GB** | ✓ — **24 tokens/s** on an M4 Pro |
+| **4-bit** | **9.0 GB** | ✓ · **24 tokens/s** on an M4 Pro |
 
 </div>
 
@@ -82,18 +82,18 @@ tokens/sec ≈ 0.75 × memory bandwidth ÷ bytes read per token
 The 0.75 is calibrated, not assumed: Qwen2.5-Coder 14B at 4-bit measured 24.5 tok/s on
 an M4 Pro (273 GB/s), and the formula predicts 24.
 
-- **Fit** — weights + KV cache at 16k context + compute buffers must fit the model
+- **Fit:** weights + KV cache at 16k context + compute buffers must fit the model
   budget: unified memory minus ~6 GB for the app, the sandbox and macOS, and at most
   Metal's wired limit minus 1.5 GB.
-- **Speed** — dense models read all their weights per token; a mixture-of-experts reads
+- **Speed:** dense models read all their weights per token; a mixture-of-experts reads
   only its active experts, which is why a 30B MoE can outrun a dense 14B.
-- **Quantization** — the best-quality level that still meets the speed target. Nothing
+- **Quantization:** the best-quality level that still meets the speed target. Nothing
   below 4-bit is offered.
-- **Priority** (Settings → Generation) — *Speed* wants 35+ tok/s, *Balance* 20+,
+- **Priority** (Settings → Generation): *Speed* wants 35+ tok/s, *Balance* 20+,
   *Quality* accepts down to 10 for a stronger model.
 
 Every size in the catalog is the real byte count of the real file, and every KV figure
-comes from the model's own config — so "too big" is a fact, not a guess. Run
+comes from the model's own config, so "too big" is a fact, not a guess. Run
 `npm run models` to see the ranking for your own Mac.
 
 </details>
@@ -183,7 +183,7 @@ Two details that matter:
 2. **The model is proxied.** `/llm/*` → `127.0.0.1:8757/v1/*`, in both the dev server and
    the packaged app, which keeps requests same-origin under cross-origin isolation.
 
-The model's output format — full files every time, no diffs:
+The model's output format is full files every time, never diffs:
 
 ```
 <file path="src/App.jsx">
@@ -217,7 +217,7 @@ If a model ever degenerates into one repeated character, generation stops with a
 error instead of streaming noise.
 
 In the app, the stream is parsed every 70 ms instead of per token, panes are memoized,
-terminal writes are batched and vendor code is split out — the app's own bundle is 59 kB.
+terminal writes are batched and vendor code is split out. The app's own bundle is 59 kB.
 
 </details>
 
@@ -232,11 +232,11 @@ terminal writes are batched and vendor code is split out — the app's own bundl
 | `JEMERO_URL` | `http://127.0.0.1:8757` | Where the model server listens |
 | `JEMERO_HOME` | `~/Library/Application Support/Jemero` | Models, runtime, logs, settings |
 | `JEMERO_LLAMA_BIN` | The bundled runtime | Use your own `llama-server` build |
-| `JEMERO_KEEP_WARM` | — | `1` keeps the model loaded after quitting |
+| `JEMERO_KEEP_WARM` | none | `1` keeps the model loaded after quitting |
 | `JEMERO_DEV_PORT` | A free port | Pin the dev server |
-| `JEMERO_OPEN` | — | `models` or `settings`: open straight onto that panel |
+| `JEMERO_OPEN` | none | `models` or `settings`: open straight onto that panel |
 | `JEMERO_THEME` | The OS | `light` or `dark` for this run |
-| `JEMERO_CAPTURE` | — | Write a PNG of the window once loaded |
+| `JEMERO_CAPTURE` | none | Write a PNG of the window once loaded |
 
 Server log: `~/Library/Application Support/Jemero/logs/llama-server.log`
 
@@ -263,8 +263,8 @@ npm run dist
 gh release create v0.2.0 release/Jemero-arm64.dmg --title "Jemero 0.2.0"
 ```
 
-The DMG name has no version in it, so the download link — `releases/latest/download/Jemero-arm64.dmg` —
-always serves the newest release. The website is `docs/index.html`, served by GitHub Pages
+The DMG name has no version in it, so the download link
+(`releases/latest/download/Jemero-arm64.dmg`) always serves the newest release. The website is `docs/index.html`, served by GitHub Pages
 from `/docs`. To move to a newer llama.cpp, bump `BUILD` in `electron/runtime.cjs` and run
 `npm run runtime`.
 

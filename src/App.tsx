@@ -32,7 +32,7 @@ type Turn = { role: 'user' | 'assistant'; text: string }
 
 /**
  * "Failed to resolve import \"x\"" means the model used a package it never
- * declared. That's a build-system problem, not a creative one — resolve the bare
+ * declared. That's a build-system problem, not a creative one, resolve the bare
  * specifier to a package name and install it rather than round-tripping the model.
  */
 function missingPackage(err: string): string | null {
@@ -147,8 +147,8 @@ export default function App() {
       if (result.ok) {
         const ids = await listModels().catch(() => [])
         if (cancelled) return
-        // The server holds exactly one model at a time, so it — not a stale
-        // selection — is the truth about what a prompt will be answered by.
+        // The server holds exactly one model at a time, so it, not a stale
+        // selection, is the truth about what a prompt will be answered by.
         setModel(ids[0] ?? '')
       }
     }
@@ -168,7 +168,7 @@ export default function App() {
 
   /**
    * Boot the sandbox and run the base `npm install` immediately, in parallel with
-   * the model's first generation — by the time tokens stop, deps are usually there.
+   * the model's first generation, by the time tokens stop, deps are usually there.
    */
   const warmSandbox = useCallback(() => {
     if (!warmup.current) {
@@ -201,7 +201,7 @@ export default function App() {
     const generated = Object.keys(files).filter((p) => !(p in TEMPLATE))
     const isFirst = history.current.length === 1
     // A prompt edited in Settings applies to the next conversation, not to one
-    // already under way — swapping it mid-thread would contradict the history
+    // already under way, swapping it mid-thread would contradict the history
     // the model has already been shown.
     if (isFirst) history.current[0] = { role: 'system', content: effectivePrompt(settings) }
     history.current.push({
@@ -215,7 +215,7 @@ export default function App() {
 
     let raw = ''
     // parseArtifacts re-reads the whole accumulated stream, so calling it per
-    // token is quadratic — on a five-file app that is thousands of passes over a
+    // token is quadratic, on a five-file app that is thousands of passes over a
     // growing string, and three setStates each time. Coalesce instead: parse on
     // a fixed interval, and once more when the stream ends.
     let lastParse = 0
@@ -262,7 +262,7 @@ export default function App() {
             // Record first, then abort: the catch below treats a plain abort as
             // the user pressing Stop and stays quiet, which would hide this.
             broken = new Error(
-              `The model started repeating “${raw.slice(-1)}” endlessly — its output is broken, not slow. ` +
+              `The model started repeating “${raw.slice(-1)}” endlessly. Its output is broken, not slow. ` +
                 'Switch to another model from the header; if this one keeps doing it, delete and re-download it.',
             )
             controller.abort()
@@ -293,7 +293,7 @@ export default function App() {
       if (controller.signal.aborted) return
       const wc = await getContainer(log)
 
-      // Repair design-system imports the model forgot — otherwise React renders a
+      // Repair design-system imports the model forgot, otherwise React renders a
       // blank page and neither Vite nor we would report anything.
       const repaired = written.map((f) => {
         if (!settings.autoFixImports) return f
@@ -319,7 +319,7 @@ export default function App() {
         log(`↻ dependencies needed: ${needed.join(', ')}`)
         const code = await installPackages(wc, needed, log)
         if (code === 0) needed.forEach((p) => installed.current.add(p))
-        else log('✗ package install failed — preview may not build')
+        else log('✗ package install failed, preview may not build')
       }
 
       // Written after installing, so an HMR update never lands on a missing dep.
@@ -364,7 +364,7 @@ export default function App() {
       const next = [...t]
       const last = next[next.length - 1]
       if (last?.role === 'assistant') {
-        next[next.length - 1] = { role: 'assistant', text: `${last.text}\n\n— stopped` .trim() }
+        next[next.length - 1] = { role: 'assistant', text: `${last.text}\n\n(stopped)` .trim() }
       }
       return next
     })
@@ -387,7 +387,7 @@ export default function App() {
     if (!pkg || autoInstalled.current.has(pkg)) return
     autoInstalled.current.add(pkg)
     void (async () => {
-      log(`↻ missing dependency "${pkg}" — installing it`)
+      log(`↻ missing dependency "${pkg}", installing it`)
       const wc = await getContainer(log)
       const code = await installPackages(wc, [pkg], log)
       if (code === 0) {
@@ -503,8 +503,8 @@ export default function App() {
                     No model is running yet.{' '}
                     <button className="link" onClick={() => setBrowserOpen(true)} title={serverStatus}>
                       Pick one for this Mac
-                    </button>{' '}
-                    — it downloads and starts by itself.
+                    </button>
+                    . It downloads and starts by itself.
                   </p>
                 )}
               </div>
@@ -534,7 +534,7 @@ export default function App() {
             <textarea
               value={prompt}
               placeholder={
-                serverOk ? 'Build me…' : serverLoading ? 'Loading the model…' : 'No model is serving — pick one from the header'
+                serverOk ? 'Build me…' : serverLoading ? 'Loading the model…' : 'No model is serving. Pick one from the header'
               }
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => {
@@ -593,15 +593,15 @@ export default function App() {
               </svg>
             </button>
           </nav>
-          {/* All three stay mounted — the preview iframe and the WebContainer
-              service worker behind it must not be torn down on a tab switch —
+          {/* All three stay mounted, the preview iframe and the WebContainer
+              service worker behind it must not be torn down on a tab switch,
               so visibility is a class, not `hidden`, and can be transitioned. */}
           <div className="pane">
             <div className={`fill slot${tab === 'preview' ? ' shown' : ''}`}>
               <Preview
                 url={previewUrl}
                 reloadKey={reloadKey}
-                status={busy ? PHASE_LABEL[phase] : 'No preview yet — send a prompt.'}
+                status={busy ? PHASE_LABEL[phase] : 'No preview yet. Send a prompt.'}
               />
             </div>
             <div className={`fill slot${tab === 'code' ? ' shown' : ''}`}>

@@ -12,7 +12,7 @@ export async function getContainer(log: Log): Promise<WebContainer> {
   if (booting) return booting
   if (!crossOriginIsolated) {
     throw new Error(
-      'Page is not cross-origin isolated — WebContainer needs COOP/COEP headers (see vite.config.ts).',
+      'Page is not cross-origin isolated: WebContainer needs COOP/COEP headers (see vite.config.ts).',
     )
   }
   log('$ booting WebContainer…')

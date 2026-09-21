@@ -1,7 +1,7 @@
 // The only bridge between the renderer and the model machinery.
 //
-// The window stays contextIsolated with nodeIntegration off — WebContainer's
-// preview runs untrusted generated code in there — so this exposes a small,
+// The window stays contextIsolated with nodeIntegration off, WebContainer's
+// preview runs untrusted generated code in there, so this exposes a small,
 // fixed set of calls rather than anything resembling `require`.
 const { contextBridge, ipcRenderer } = require('electron')
 

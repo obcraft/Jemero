@@ -2,13 +2,13 @@
 //
 // Atomic Chat used to own this: it shipped llama.cpp, held the models and
 // served them. Depending on another app for the core of this one was the weak
-// link — it had to be installed, running, and serving the right model. Instead
+// link, it had to be installed, running, and serving the right model. Instead
 // we carry llama.cpp ourselves: the official prebuilt macOS binary from the
 // llama.cpp releases, resolved in this order:
 //
-//   1. bundled in the packaged app (Resources/llama) — nothing to download
-//   2. vendor/llama in the repo — same, for development
-//   3. the app-support cache — fetched once on first run
+//   1. bundled in the packaged app (Resources/llama), nothing to download
+//   2. vendor/llama in the repo, same, for development
+//   3. the app-support cache, fetched once on first run
 //
 // Pinned to one build so behaviour doesn't drift under the user; BUILD is the
 // single place to bump, and `npm run runtime` re-vendors it.
@@ -25,7 +25,7 @@ const arch = () => (process.arch === 'x64' ? 'x64' : 'arm64')
 const assetName = () => `llama-${BUILD}-bin-macos-${arch()}.tar.gz`
 const assetUrl = () => `${REPO}/${BUILD}/${assetName()}`
 
-/** Our own application-support directory — not Atomic Chat's. */
+/** Our own application-support directory, not Atomic Chat's. */
 function appSupport() {
   const home = process.env.JEMERO_HOME ?? path.join(os.homedir(), 'Library/Application Support/Jemero')
   migrateFromOldName(home)
@@ -52,7 +52,7 @@ function migrateFromOldName(home) {
     try {
       fs.renameSync(from, to)
     } catch {
-      /* in use or cross-volume — leave it; the app still works */
+      /* in use or cross-volume, leave it; the app still works */
     }
   }
 }
@@ -85,7 +85,7 @@ function find() {
 }
 
 /**
- * Fetch and unpack the runtime into `dest`. 11 MB, so a few seconds — and it
+ * Fetch and unpack the runtime into `dest`. 11 MB, so a few seconds, and it
  * lands outside the app bundle, so an app update doesn't re-download it.
  */
 async function download(onStatus = () => {}, dest = cacheDir()) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Vendor the llama.cpp runtime into vendor/llama so `npm run dist` ships it
-// inside the app — a fresh Mac then needs no download at all to start serving.
+// inside the app, a fresh Mac then needs no download at all to start serving.
 // Only llama-server and the libraries it links are kept; the tarball's other
 // ~40 tools would triple the bundle for nothing.
 import { createRequire } from 'node:module'

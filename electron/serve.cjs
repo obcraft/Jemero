@@ -1,6 +1,6 @@
 // Production server for the packaged app: serves the built dist/ with the
 // cross-origin isolation headers WebContainer needs, and proxies /llm to the
-// local model — the same two things vite.config.ts does in development.
+// local model, the same two things vite.config.ts does in development.
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')

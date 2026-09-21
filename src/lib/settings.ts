@@ -2,7 +2,7 @@
 // useSyncExternalStore so every consumer re-renders on change without a context
 // provider wrapping the tree.
 //
-// Anything in here has to *do* something — the panel is not a preferences
+// Anything in here has to *do* something, the panel is not a preferences
 // museum. Each field notes where it takes effect.
 import { useSyncExternalStore } from 'react'
 import { SYSTEM_PROMPT } from './systemPrompt'
@@ -75,7 +75,7 @@ export const ANSWER_TOKENS: Record<AnswerLength, number> = {
 export const ANSWER_HINT: Record<AnswerLength, string> = {
   brief: 'One file, one screen. Fastest.',
   standard: 'Up to ~4 files. The default.',
-  long: 'Room for a bigger app — uses most of a 16k window.',
+  long: 'Room for a bigger app. Uses most of a 16k window.',
 }
 
 /** Characters of history kept; ~3.5 chars per token against a 16k window. */
@@ -88,13 +88,13 @@ export const MEMORY_CHARS: Record<Memory, number> = {
 export const MEMORY_HINT: Record<Memory, string> = {
   short: 'Forgets fast, always has room to answer.',
   normal: 'A few follow-ups. Matches the 16k window.',
-  long: 'More context, tighter fit — leave answers on Brief or Standard.',
+  long: 'More context, tighter fit. Keep answers on Brief or Standard.',
 }
 
 const KEY = 'jemero.settings.v1'
 
 /**
- * In the Mac app, settings live in a file the main process owns — the page's
+ * In the Mac app, settings live in a file the main process owns, the page's
  * origin changes every launch, so localStorage alone forgot everything on
  * restart. localStorage remains the store for the browser build.
  */
@@ -116,7 +116,7 @@ function persist(value: Settings | null) {
     if (value) localStorage.setItem(KEY, JSON.stringify(value))
     else localStorage.removeItem(KEY)
   } catch {
-    /* private window, or storage full — the file copy still has it */
+    /* private window, or storage full, the file copy still has it */
   }
 }
 

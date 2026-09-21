@@ -20,7 +20,7 @@ type Tab = 'general' | 'model' | 'prompt'
 
 /**
  * Settings. Every control here changes what the next generation actually does,
- * and says so underneath — a slider whose effect you can't predict is worse
+ * and says so underneath, a slider whose effect you can't predict is worse
  * than no slider.
  */
 export default function SettingsPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -177,7 +177,7 @@ export default function SettingsPanel({ open, onClose }: { open: boolean; onClos
             <p className="note">
               {usingDefaultPrompt
                 ? 'Using the built-in prompt: the design system, the <file> output format and the rules that keep small models on track.'
-                : 'Custom prompt. It replaces the built-in one entirely, including the output-format rules — keep the <file path="…"> blocks or nothing gets written.'}
+                : 'Custom prompt. It replaces the built-in one entirely, including the output-format rules. Keep the <file path="…"> blocks or nothing gets written.'}
             </p>
 
             <textarea

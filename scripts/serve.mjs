@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Start the local model server without opening the app — the same choice the
+// Start the local model server without opening the app, the same choice the
 // app would make, so the two can't drift. `npm run stop` shuts it down again.
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'

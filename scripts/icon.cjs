@@ -11,7 +11,7 @@ const path = require('node:path')
 const OUT = path.join(__dirname, '..', 'build')
 const SIZES = [16, 32, 64, 128, 256, 512, 1024]
 
-// A hexagon on a squircle, in the app's accent — the same ⬢ the header uses.
+// A hexagon on a squircle, in the app's accent, the same ⬢ the header uses.
 const PAGE = `<!doctype html><meta charset="utf-8"><style>
   html,body{margin:0;width:1024px;height:1024px;background:transparent}
   .plate{

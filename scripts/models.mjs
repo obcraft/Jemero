@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The same recommendation the app shows, from a terminal — and the installer
+// The same recommendation the app shows, from a terminal, and the installer
 // behind it. Useful before you ever open the window, and the thing to reach for
 // when a 17 GB download deserves a real progress line instead of a spinner.
 //
@@ -72,7 +72,7 @@ if (flag('--install')) {
     process.exit(0)
   }
 
-  console.log(`${pick.label} ${pick.quant} — ${pick.sizeGB} GB from ${pick.repo}`)
+  console.log(`${pick.label} ${pick.quant}, ${pick.sizeGB} GB from ${pick.repo}`)
   console.log(`→ ${store.modelDir(pick.modelId)}\n`)
 
   let lastLine = 0
@@ -94,11 +94,11 @@ if (flag('--install')) {
   })
   process.stdout.write('\n')
   if (res.cancelled) {
-    console.log('Cancelled — the partial file is kept, rerun to resume.')
+    console.log('Cancelled. The partial file is kept; rerun to resume.')
     process.exit(1)
   }
   console.log(`\nInstalled ${pick.modelId}`)
-  console.log(`Run \`npm start\` — the app will serve it at ${pick.ctx / 1024}k context.`)
+  console.log(`Run \`npm start\` and the app will serve it at ${pick.ctx / 1024}k context.`)
   process.exit(0)
 }
 
@@ -127,7 +127,7 @@ if (best) {
   for (const r of reasons) console.log(`    · ${wrap(r, 92, 6)}`)
   console.log(
     installedIds.has(best.modelId)
-      ? `\n  Already installed — \`npm start\` will serve it.\n`
+      ? `\n  Already installed. \`npm start\` will serve it.\n`
       : `\n  Install it:  npm run models:install\n`,
   )
 }

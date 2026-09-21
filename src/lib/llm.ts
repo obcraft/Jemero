@@ -178,7 +178,7 @@ export async function streamChat(opts: StreamOpts): Promise<string> {
  * Generated files go into the history verbatim, so a few follow-up turns can blow
  * past the context window. Keep the system prompt plus the most recent turns that
  * fit in a rough character budget (~3.5 chars/token, sized for a 16k window
- * shared with a 4k completion). The budget is a setting — see lib/settings.ts.
+ * shared with a 4k completion). The budget is a setting, see lib/settings.ts.
  */
 export function trimHistory(messages: ChatMessage[], maxChars = 36_000): ChatMessage[] {
   const system = messages[0]

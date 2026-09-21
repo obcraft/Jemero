@@ -18,7 +18,7 @@ function sysctl(key) {
   }
 }
 
-/** GPU core count, straight from IORegistry — much cheaper than system_profiler. */
+/** GPU core count, straight from IORegistry, much cheaper than system_profiler. */
 function gpuCores() {
   try {
     const out = execFileSync('/usr/sbin/ioreg', ['-rl', '-c', 'AGXAccelerator'], {

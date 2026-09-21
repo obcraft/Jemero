@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
  * The shell every panel in the app uses: one dialog, one animation, one set of
  * dismiss rules.
  *
- * It owns its own unmount so the close animation can finish — the parent just
+ * It owns its own unmount so the close animation can finish, the parent just
  * flips `open`. React has no built-in exit transition, so the pattern is: render
  * on open, flag 'out' on close, unmount when the transition ends (with a timer
  * as a backstop, because a transition on a hidden element never fires).
@@ -31,7 +31,7 @@ export default function Modal({
   const panel = useRef<HTMLDivElement>(null)
   const restoreFocus = useRef<Element | null>(null)
   // Read through a ref: the parent's onClose is a new function every render,
-  // and as an effect dependency it re-ran the focus handling below each time —
+  // and as an effect dependency it re-ran the focus handling below each time,
   // yanking focus out of whatever input was being typed in.
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose

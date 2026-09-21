@@ -37,5 +37,5 @@
     "electron@33.4.11": true
   },
   "main": "electron/main.cjs",
-  "description": "Jemero — describe an app, a local model builds it. Native macOS, runs fully offline on Apple Silicon."
+  "description": "Jemero: describe an app, a local model builds it. Native macOS, runs fully offline on Apple Silicon."
 }

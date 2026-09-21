@@ -1,5 +1,5 @@
 // Small models reliably use <Label> or <CardFooter> without importing them, which
-// React reports as a blank screen and a ReferenceError — not a build error. We know
+// React reports as a blank screen and a ReferenceError, not a build error. We know
 // exactly what the design system exports and where, so repair it deterministically
 // instead of asking the model to try again.
 

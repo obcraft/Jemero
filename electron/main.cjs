@@ -11,13 +11,13 @@ const { startServer } = require('./serve.cjs')
 
 // WebContainer serves its preview from a *.webcontainer-api.io origin backed by a
 // Service Worker inside a cross-origin iframe. Chromium only allows that when
-// third-party storage partitioning is on, and Electron ships with it off — without
+// third-party storage partitioning is on, and Electron ships with it off, without
 // this switch the preview pane shows "Enable Storage Partitioning".
 app.commandLine.appendSwitch('enable-features', 'ThirdPartyStoragePartitioning')
 
 const isDev = !app.isPackaged
 
-// JEMERO_THEME=light|dark overrides the OS for this run — the renderer's
+// JEMERO_THEME=light|dark overrides the OS for this run, the renderer's
 // 'System' setting follows nativeTheme, so both themes can be checked on one Mac.
 if (['light', 'dark'].includes(process.env.JEMERO_THEME)) nativeTheme.themeSource = process.env.JEMERO_THEME
 
@@ -169,8 +169,8 @@ function emit(payload) {
 
 /**
  * The model surface the renderer talks to. Everything here is main-process work
- * — reading hardware, writing into the model store, restarting the
- * llama.cpp server — so the renderer only ever sees plain JSON.
+ *, reading hardware, writing into the model store, restarting the
+ * llama.cpp server, so the renderer only ever sees plain JSON.
  */
 /**
  * Settings live in a file, not the renderer's localStorage: the UI is served
@@ -193,7 +193,7 @@ function registerSettingsIpc() {
       require('node:fs').mkdirSync(path.dirname(file), { recursive: true })
       require('node:fs').writeFileSync(file, JSON.stringify(value, null, 2) + '\n')
     } catch {
-      /* disk full or read-only — keep running on in-memory settings */
+      /* disk full or read-only, keep running on in-memory settings */
     }
   })
 }
@@ -310,10 +310,10 @@ async function bootstrap() {
 }
 
 // Two instances share one userData directory and fight over the Service Worker
-// database — which is exactly what WebContainer's preview runs on. Refuse the
+// database, which is exactly what WebContainer's preview runs on. Refuse the
 // second launch and focus the window that already exists.
 if (!app.requestSingleInstanceLock()) {
-  console.log('Jemero is already running — focusing that window.')
+  console.log('Jemero is already running, focusing that window.')
   app.quit()
 } else {
   app.on('second-instance', () => {
@@ -324,13 +324,13 @@ if (!app.requestSingleInstanceLock()) {
   })
   app.whenReady().then(bootstrap)
 
-  // One window is the whole app, so closing it quits — the macOS habit of
+  // One window is the whole app, so closing it quits, the macOS habit of
   // staying alive in the Dock would keep the model's memory held for nothing.
   app.on('window-all-closed', () => app.quit())
 
   // Quitting gives the memory back: the model server holds the weights and KV
   // cache (10+ GB for a 14B), and it runs as its own process, so it has to be
-  // stopped explicitly or it outlives the window. The next launch reloads it —
+  // stopped explicitly or it outlives the window. The next launch reloads it,
   // a few seconds while macOS still has the file in its page cache.
   // Registered only in the primary instance: a second launch quits at once,
   // and must not take the running window's model down with it.

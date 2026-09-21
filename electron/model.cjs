@@ -1,7 +1,7 @@
 // Serving a local model, entirely in-app.
 //
 // We run llama.cpp's llama-server ourselves (see runtime.cjs), with flags tuned
-// for Apple Silicon, and speak its OpenAI-compatible API — the same API the
+// for Apple Silicon, and speak its OpenAI-compatible API, the same API the
 // renderer always used, so nothing above this file had to change.
 //
 // The server is spawned detached and deliberately left running when the app
@@ -181,7 +181,7 @@ async function serveModel(id, ctx, onStatus = () => {}) {
 /**
  * Switch the served model. Remembered, so the next launch opens on it too.
  * Two models don't fit in wired memory at once, so the old one has to be gone
- * before the new one loads — hence stop, wait, then start.
+ * before the new one loads, hence stop, wait, then start.
  */
 async function switchModel(id, onStatus = () => {}) {
   const device = detect()
@@ -213,7 +213,7 @@ async function ensureModel(onStatus = () => {}) {
       ok: false,
       needsModel: true,
       reason: pick
-        ? `No model downloaded yet.\n\nBest for this ${device.machine} (${device.chip}, ${device.ramGB} GB):\n${pick.label} ${pick.quant} — ${pick.sizeGB} GB`
+        ? `No model downloaded yet.\n\nBest for this ${device.machine} (${device.chip}, ${device.ramGB} GB):\n${pick.label} ${pick.quant}, ${pick.sizeGB} GB`
         : 'No model downloaded, and nothing in the catalog fits this machine.',
     }
   }

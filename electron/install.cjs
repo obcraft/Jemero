@@ -18,7 +18,7 @@ const modelDir = (id) => path.join(modelsRoot(), ...id.split('/'))
 const ggufPath = (id) => path.join(modelDir(id), 'model.gguf')
 
 /**
- * Installed models, read straight off disk — this way a half-finished download (a leftover .part) is visible as
+ * Installed models, read straight off disk, this way a half-finished download (a leftover .part) is visible as
  * such instead of looking like a missing model.
  */
 async function installed() {
@@ -65,7 +65,7 @@ async function writeManifest(id, bytes, extra = {}) {
  *
  * Hard links, not copies: same volume means the "import" of a 9 GB file is a
  * metadata write, uses no extra disk, and leaves each app owning an independent
- * name for it — uninstalling Atomic Chat no longer takes the model with it.
+ * name for it, uninstalling Atomic Chat no longer takes the model with it.
  * Only when the two folders are on different volumes do we fall back to leaving
  * the file where it is and skipping it.
  */
@@ -177,7 +177,7 @@ async function acquireLock(dir) {
 /**
  * Download `plan.url` into place, resuming a previous attempt when one is
  * there. Weights are 5-60 GB and connections drop, so a resumable .part is the
- * difference between a retry and starting over — but only if the resume is
+ * difference between a retry and starting over, but only if the resume is
  * provably at the right offset and the result is checked, both done here.
  *
  * @param {{modelId: string, url: string, bytes: number, repo: string, file: string, quant?: string}} plan

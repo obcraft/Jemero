@@ -27,7 +27,7 @@ export function missingDeps(files: Record<string, string>, installed: Set<string
   return [...found]
 }
 
-/** Deps the mounted template already provides — see lib/template.ts. */
+/** Deps the mounted template already provides, see lib/template.ts. */
 export const BASE_DEPS = new Set([
   'react',
   'react-dom',

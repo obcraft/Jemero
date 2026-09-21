@@ -14,7 +14,7 @@ import {
  * The header's model menu: everything already downloaded, one click each.
  *
  * Switching means restarting llama.cpp on other weights, so this is as fast as
- * it can honestly be — it reads from the cached snapshot (no spinner on open),
+ * it can honestly be, it reads from the cached snapshot (no spinner on open),
  * shows the restart as inline status on the row, and leaves the deep catalog to
  * the browser behind "Browse all models".
  */
@@ -33,7 +33,7 @@ export default function ModelMenu({
   const [status, setStatus] = useState<{ id: string; text: string } | null>(null)
   const menu = useRef<HTMLDivElement>(null)
   const sync = useCallback(() => setSnap(cachedSnapshot()), [])
-  // Fresh closures from the parent every render — read through refs so the
+  // Fresh closures from the parent every render, read through refs so the
   // subscriptions below are made once, not on every app re-render.
   const onActiveRef = useRef(onActive)
   const onCloseRef = useRef(onClose)

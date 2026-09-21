@@ -3,7 +3,7 @@
 // Every size below is the real byte count of the real GGUF on Hugging Face, and
 // every KV figure is derived from the model's own config (layers × KV heads ×
 // head_dim × 2 for K+V × 2 bytes for f16). Nothing here is a round number for
-// the sake of looking tidy — the whole point is that the fit check is true.
+// the sake of looking tidy, the whole point is that the fit check is true.
 //
 // `codingScore` is a judgement call, not a benchmark score: it ranks how well
 // the model writes a *whole* small React app in one pass and keeps to a strict
@@ -61,7 +61,7 @@ const CATALOG = [
     codingScore: 90,
     kvKiBPerToken: 256, // 64 × 8 × 128 × 2 × 2
     maxCtx: 32768,
-    blurb: 'Dense and very accurate, but every token reads all 32B — needs bandwidth, not just RAM.',
+    blurb: 'Dense and very accurate, but every token reads all 32B, so it needs bandwidth, not just RAM.',
     quants: [
       { tag: 'Q4_K_S', file: 'Qwen2.5-Coder-32B-Instruct-Q4_K_S.gguf', bytes: 18784410592 },
       { tag: 'Q4_K_M', file: 'Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf', bytes: 19851336672 },
@@ -149,7 +149,7 @@ const CATALOG = [
     codingScore: 58,
     kvKiBPerToken: 36, // 36 × 2 × 128 × 2 × 2
     maxCtx: 32768,
-    blurb: 'For 8–16 GB Macs. Keeps prompts simple and single-screen.',
+    blurb: 'For 8 to 16 GB Macs. Keeps prompts simple and single-screen.',
     quants: [
       { tag: 'Q4_K_M', file: 'Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf', bytes: 1929903360 },
       { tag: 'Q5_K_M', file: 'Qwen2.5-Coder-3B-Instruct-Q5_K_M.gguf', bytes: 2224815360 },
@@ -249,7 +249,7 @@ const CATALOG = [
     codingScore: 76,
     kvKiBPerToken: 224, // 56 × 8 × 128 × 2 × 2
     maxCtx: 32768,
-    // Mistral's non-production licence — fine to run locally, read it before shipping.
+    // Mistral's non-production licence, fine to run locally, read it before shipping.
     blurb: 'Mistral’s 2024 code model. Superseded by Devstral, but strong at fill-in-the-middle.',
     quants: [
       { tag: 'Q4_K_S', file: 'Codestral-22B-v0.1-Q4_K_S.gguf', bytes: 12660384096 },
@@ -272,7 +272,7 @@ const CATALOG = [
     // 64 rope dims per layer, not full K and V, so it is unusually small.
     kvKiBPerToken: 48,
     maxCtx: 131072,
-    blurb: 'Very fast for its knowledge — 2.4B active. Older, so weaker at holding a strict format.',
+    blurb: 'Very fast for its knowledge: 2.4B active. Older, so weaker at holding a strict format.',
     quants: [
       { tag: 'Q4_K_M', file: 'DeepSeek-Coder-V2-Lite-Instruct-Q4_K_M.gguf', bytes: 10364416768 },
       { tag: 'Q5_K_M', file: 'DeepSeek-Coder-V2-Lite-Instruct-Q5_K_M.gguf', bytes: 11851313920 },
@@ -303,7 +303,7 @@ const CATALOG = [
  * This app needs 16k and gains nothing from more: `trimHistory` feeds at most
  * ~36k characters of history (~10k tokens) and completions are capped at 4k, so
  * a bigger window would only cost memory and slower prompt processing. Treat 16k
- * as a requirement — a model that can only be served at 8k here is a model that
+ * as a requirement, a model that can only be served at 8k here is a model that
  * does not fit, and saying so is more useful than shipping a truncated context.
  */
 const TARGET_CTX = 16384
@@ -356,7 +356,7 @@ function pickCtx(entry, bytes, budget) {
 
 /**
  * Score one (model, quant) pair for this machine. Quality leads; speed can only
- * scale it down, never overturn it — a fast model that writes broken code is
+ * scale it down, never overturn it, a fast model that writes broken code is
  * not a better answer than a slower one that works.
  */
 function evaluate(entry, quant, device, target = SPEED_TARGET) {
@@ -397,7 +397,7 @@ function evaluate(entry, quant, device, target = SPEED_TARGET) {
 
 /**
  * One row per model: its best-scoring quantization for this machine. Picking the
- * quantization is the engine's job, not the user's — that's the whole premise —
+ * quantization is the engine's job, not the user's, that's the whole premise,
  * so only the winner is returned. Models that don't fit are returned too, marked
  * unfit, because "why not the big one?" is the first question anybody asks.
  */
@@ -422,7 +422,7 @@ function rank(device, priority = 'balanced') {
 function reasons(pick, device, ranked, target) {
   const out = []
   out.push(
-    `${pick.sizeGB} GB of weights + ${pick.kvGB} GB of KV cache at ${(pick.ctx / 1024) | 0}k context fits inside your ${device.budgetGB} GB model budget — ${device.ramGB} GB of unified memory, less what Chromium, the WebContainer sandbox and macOS need.`,
+    `${pick.sizeGB} GB of weights + ${pick.kvGB} GB of KV cache at ${(pick.ctx / 1024) | 0}k context fits inside your ${device.budgetGB} GB model budget (${device.ramGB} GB of unified memory, less what Chromium, the WebContainer sandbox and macOS need).`,
   )
   out.push(
     pick.moe
@@ -431,7 +431,7 @@ function reasons(pick, device, ranked, target) {
   )
   out.push(`${pick.quant} is the best-quality quantization that still clears ${target} tok/s on this Mac.`)
   const bigger = ranked.find((r) => !r.fits)
-  if (bigger) out.push(`${bigger.label} scores higher but needs about ${bigger.needsGB} GB — it would swap here.`)
+  if (bigger) out.push(`${bigger.label} scores higher but needs about ${bigger.needsGB} GB, so it would swap here.`)
   return out
 }
 
