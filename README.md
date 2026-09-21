@@ -1,12 +1,14 @@
 # Jemero
 
-A minimal Lovable/bolt.new clone, running as a **native macOS app**. You describe an
-app, a **local** model writes it, and it gets installed and run in a **WebContainer**
-sandbox inside the window. No cloud model, no remote build server — and no other app to
-install: the inference runtime ships inside.
+**Your offline coding agent.** Local, offline, free.
 
-The shell is Electron, not Tauri: WebContainer needs Chromium, and Tauri's WKWebView is
-not a supported target for it.
+A **native macOS app**: you describe an app, a **quantized** model running on your Mac
+writes it, and it gets installed and run in a **WebContainer** sandbox inside the window.
+No cloud model, no account, no API key, no remote build server — the inference runtime
+ships inside the app.
+
+The shell is Electron because WebContainer needs Chromium; the system WebView isn't a
+supported target for it.
 
 ## How it works
 
@@ -20,8 +22,8 @@ prompt ──► llama-server (built in, Metal)  ──► <file> blocks ──�
 - **`electron/runtime.cjs`** — the inference runtime: llama.cpp's official prebuilt
   `llama-server`, pinned to one build. Bundled in the `.app`, vendored in `vendor/llama`
   for development, or fetched once (11 MB) into Application Support as a fallback.
-- **`electron/model.cjs`** — starts, stops and switches that server, configured
-  exactly as Atomic Chat runs llama.cpp (see **Performance**). It keeps its pid in `server.json`, so it only ever
+- **`electron/model.cjs`** — starts, stops and switches that server, with llama.cpp
+  settings tuned for Apple Silicon (see **Performance**). It keeps its pid in `server.json`, so it only ever
   stops its own process, and remembers the last model you picked.
 - **`electron/hardware.cjs`** + **`electron/catalog.cjs`** — read the Mac (chip, unified
   memory, GPU cores, memory bandwidth) and rank 15 verified models for it.
@@ -104,12 +106,9 @@ Pro (273 GB/s), and the model predicts 24.
 Every size in the catalog is the real byte count of the real GGUF, and every KV figure
 comes from the model's own config — so "too big" is a fact, not a guess.
 
-Models you downloaded earlier through Atomic Chat are adopted automatically, by hard
-link: no copy, no extra disk, and they stay yours if that app is removed.
-
 ## Performance
 
-`llama-server` runs with the same configuration Atomic Chat uses:
+`llama-server` runs with:
 
 | flag | why |
 |---|---|
@@ -184,7 +183,7 @@ so a fresh Mac needs nothing but a model download. The runtime isn't committed
 | mode | when | what the user gets |
 |---|---|---|
 | **ad-hoc** (default) | no certificate present | a valid, sealed bundle; macOS asks once via *Open Anyway* |
-| **Developer ID + notarized** | `CSC_NAME` (or `CSC_LINK`) plus `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` | opens with no warning, like Atomic Chat |
+| **Developer ID + notarized** | `CSC_NAME` (or `CSC_LINK`) plus `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` | opens with no warning at all |
 
 The Developer ID mode needs a paid Apple Developer account. It enables the hardened
 runtime with the entitlements in `build/entitlements.mac.plist`.
