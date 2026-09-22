@@ -516,11 +516,7 @@ export function compile(
           )
         })
 
-        const pkg = packageOf(mod)
-        const foreign =
-          (pkg === '@mui/material' && kit.id !== 'mui') ||
-          (pkg === '@mantine/core' && kit.id !== 'mantine') ||
-          (mod.startsWith('@/components/ui/') && kit.id !== 'shadcn')
+        const foreign = mod.startsWith('@/components/ui/') && kit.id !== 'shadcn'
         if (foreign) notes.push({ level: 'warn', text: `${path} imports ${mod}, but this component uses ${kit.name}; it may not render right.` })
 
         if (reexportAll) return `${indent}export * from ${quote}${mod}${quote}`

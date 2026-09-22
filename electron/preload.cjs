@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('jemero', {
   },
   /** Machine profile: chip, unified memory, GPU cores, bandwidth, model budget. */
   device: () => invoke('models:device'),
+  /** Whether the quantization switch can help on this Mac, and why not. */
+  quantization: () => invoke('models:quantization'),
+  /** Prefer 4-bit weights when ranking and choosing models. */
+  setQuantization: (on) => invoke('models:set-quantization', on),
   /** Catalog scored for this machine, plus what's installed and what's serving. */
   catalog: (priority) => invoke('models:catalog', priority),
   /** Chat models on Hugging Face beyond the catalog, sized for this machine. */

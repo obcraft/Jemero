@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Modal from './Modal'
 import {
   available,
   bridge,
@@ -115,6 +114,18 @@ export default function ModelBrowser({
   const onCloseRef = useRef(onClose)
   onActiveRef.current = onActive
   onCloseRef.current = onClose
+
+  // Esc leaves the page (capture phase, before the app's Esc-to-stop).
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || document.querySelector('.sheet-backdrop')) return
+      e.stopPropagation()
+      onCloseRef.current()
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -251,81 +262,90 @@ export default function ModelBrowser({
   )
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Models"
-      subtitle={snap ? `${snap.device.chip.replace('Apple ', '')} · ${snap.device.ramGB} GB` : undefined}
-      toolbar={available() && snap ? controls : undefined}
-      tall={available()}
-    >
-      {!available() ? (
-        <p className="note">Open the Mac app to manage models.</p>
-      ) : !snap ? (
-        <div className="skeleton-list">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="skeleton-row" />
-          ))}
+    <section className="page" aria-label="Models">
+      <header className="page-head">
+        <div className="sheet-title">
+          <strong>Models</strong>
+          {snap && <span>{`${snap.device.chip.replace('Apple ', '')} · ${snap.device.ramGB} GB`}</span>}
         </div>
-      ) : (
-        <>
-          {error && <div className="banner bad">{error}</div>}
+        <button className="sheet-close" onClick={onClose} aria-label="Close models" title="Close (Esc)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
+      </header>
+      {available() && snap && <div className="page-toolbar">{controls}</div>}
+      <div className="page-body">
+        <div className="page-inner">
+          {!available() ? (
+            <p className="note">Open the Mac app to manage models.</p>
+          ) : !snap ? (
+            <div className="skeleton-list">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="skeleton-row" />
+              ))}
+            </div>
+          ) : (
+            <>
+              {error && <div className="banner bad">{error}</div>}
 
-          <div className="model-filters">
-            <label>Parameters <select aria-label="Filter by model parameters" value={size} onChange={(e) => setSize(e.target.value as Size)}>
-              <option value="all">Any size</option><option value="1">1B or smaller</option><option value="3">3B or smaller</option><option value="8">8B or smaller</option>
-            </select></label>
-            <label>Sort <select aria-label="Sort models" value={sort} onChange={(e) => setSort(e.target.value as 'recommended' | 'smallest')}>
-              <option value="recommended">Recommended</option><option value="smallest">Smallest first</option>
-            </select></label>
-            <span>{list.length + hubRows.length} models · {list.filter((m) => m.fits).length + hubRows.filter((m) => m.fits).length} fit this Mac</span>
-          </div>
-          <p className="list-foot">Download public GGUF language models from Hugging Face. Models that cannot run here stay disabled.</p>
-          <div className="model-list">
-            {list.map(row)}
+              <div className="model-filters">
+                <label>Parameters <select aria-label="Filter by model parameters" value={size} onChange={(e) => setSize(e.target.value as Size)}>
+                  <option value="all">Any size</option><option value="1">1B or smaller</option><option value="3">3B or smaller</option><option value="8">8B or smaller</option>
+                </select></label>
+                <label>Sort <select aria-label="Sort models" value={sort} onChange={(e) => setSort(e.target.value as 'recommended' | 'smallest')}>
+                  <option value="recommended">Recommended</option><option value="smallest">Smallest first</option>
+                </select></label>
+                <span>{list.length + hubRows.length} models · {list.filter((m) => m.fits).length + hubRows.filter((m) => m.fits).length} fit this Mac</span>
+              </div>
+              <p className="list-foot">Download public GGUF language models from Hugging Face. Models that cannot run here stay disabled.</p>
+              <div className="model-list">
+                {list.map(row)}
 
-            {!list.length && !searching && (
-              <p className="note list-note">
-                {q
-                  ? `No ${view === 'downloaded' ? 'downloaded ' : ''}model matches “${q}”.`
-                  : view === 'downloaded'
-                    ? 'Nothing downloaded yet.'
-                    : 'Nothing in the catalog fits this Mac. Search for a smaller model.'}
-              </p>
-            )}
-
-            {searching && (
-              <section className="hub-results" aria-busy={hub.status === 'loading'}>
-                <div className="list-heading">
-                  On Hugging Face
-                  {hub.status === 'loading' && <span className="menu-spinner" aria-label="Searching" />}
-                </div>
-                {hub.status === 'error' ? (
-                  <p className="note list-note">{hub.reason} <button className="text-btn" onClick={() => void hub.loadMore()}>Retry</button></p>
-                ) : hub.status === 'loading' && !hubRows.length ? (
-                  <div className="skeleton-list">
-                    <div className="skeleton-row" />
-                    <div className="skeleton-row" />
-                  </div>
-                ) : (
-                  <div className={hub.status === 'loading' ? 'stale' : undefined}>{hubRows.map(row)}</div>
-                )}
-                {hubEmpty && !tooBig && <p className="note list-note">No additional GGUF models match these filters{hub.hasMore ? ' on this page' : ''}.</p>}
-                {hub.hasMore && hub.status !== 'error' && <p className="list-foot"><button className="btn ghost" disabled={hub.status === 'loading'} onClick={() => void hub.loadMore()}>{hub.status === 'loading' ? 'Loading…' : 'Load more from Hugging Face'}</button></p>}
-                {hub.status === 'done' && tooBig > 0 && (
-                  <p className="list-foot">
-                    {tooBig === 1 ? 'One more match doesn’t' : `${tooBig} more matches don’t`} fit this Mac.{' '}
-                    <button className="text-btn" onClick={() => setView('all')}>
-                      Show
-                    </button>
+                {!list.length && !searching && (
+                  <p className="note list-note">
+                    {q
+                      ? `No ${view === 'downloaded' ? 'downloaded ' : ''}model matches “${q}”.`
+                      : view === 'downloaded'
+                        ? 'Nothing downloaded yet.'
+                        : 'Nothing in the catalog fits this Mac. Search for a smaller model.'}
                   </p>
                 )}
-              </section>
-            )}
-          </div>
-        </>
-      )}
-    </Modal>
+
+                {searching && (
+                  <section className="hub-results" aria-busy={hub.status === 'loading'}>
+                    <div className="list-heading">
+                      On Hugging Face
+                      {hub.status === 'loading' && <span className="menu-spinner" aria-label="Searching" />}
+                    </div>
+                    {hub.status === 'error' ? (
+                      <p className="note list-note">{hub.reason} <button className="text-btn" onClick={() => void hub.loadMore()}>Retry</button></p>
+                    ) : hub.status === 'loading' && !hubRows.length ? (
+                      <div className="skeleton-list">
+                        <div className="skeleton-row" />
+                        <div className="skeleton-row" />
+                      </div>
+                    ) : (
+                      <div className={hub.status === 'loading' ? 'stale' : undefined}>{hubRows.map(row)}</div>
+                    )}
+                    {hubEmpty && !tooBig && <p className="note list-note">No additional GGUF models match these filters{hub.hasMore ? ' on this page' : ''}.</p>}
+                    {hub.hasMore && hub.status !== 'error' && <p className="list-foot"><button className="btn ghost" disabled={hub.status === 'loading'} onClick={() => void hub.loadMore()}>{hub.status === 'loading' ? 'Loading…' : 'Load more from Hugging Face'}</button></p>}
+                    {hub.status === 'done' && tooBig > 0 && (
+                      <p className="list-foot">
+                        {tooBig === 1 ? 'One more match doesn’t' : `${tooBig} more matches don’t`} fit this Mac.{' '}
+                        <button className="text-btn" onClick={() => setView('all')}>
+                          Show
+                        </button>
+                      </p>
+                    )}
+                  </section>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </section>
   )
 }
 

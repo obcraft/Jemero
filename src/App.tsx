@@ -19,7 +19,7 @@ import {
   type Version,
 } from './lib/library'
 import { buildRequest, buildSystem, portRequest, refineRequest, repairRequest, reviewRequest } from './lib/systemPrompt'
-import { modelLabel, setPriority, startSnapshotSync } from './lib/models'
+import { modelLabel, setPriority, setQuantization, startSnapshotSync } from './lib/models'
 import {
   applyAppearance,
   effectivePrompt,
@@ -33,8 +33,8 @@ import {
 } from './lib/settings'
 import ModelBrowser from './components/ModelBrowser'
 import ModelMenu from './components/ModelMenu'
-import KitMenu from './components/KitMenu'
-import SettingsPanel from './components/SettingsPanel'
+import SettingsPage from './components/SettingsPage'
+import QuantizeDialog from './components/QuantizeDialog'
 import Library from './components/Library'
 import Conversation, { type Draft } from './components/Conversation'
 import Stage, { type StageCode, type StageEvent } from './components/Stage'
@@ -157,6 +157,9 @@ const WIDTHS: { id: CanvasWidth; label: string; icon: string }[] = [
 ]
 
 const NEXT_BG: Record<CanvasBg, CanvasBg> = { dots: 'grid', grid: 'plain', plain: 'dots' }
+/** shadcn/ui is built on Tailwind, so there is nothing to choose: every new component uses it. */
+const NEW_KIT: KitId = 'shadcn'
+
 const NEXT_THEME: Record<CanvasTheme, CanvasTheme> = { app: 'light', light: 'dark', dark: 'app' }
 
 export default function App() {
@@ -171,12 +174,12 @@ export default function App() {
   const [serverOk, setServerOk] = useState(false)
   // The shell opens the app at #models when nothing is downloaded yet, so a
   // first run lands on the browser rather than on a chat that can't answer.
-  const [browserOpen, setBrowserOpen] = useState(() => window.location.hash === '#models')
-  const [settingsOpen, setSettingsOpen] = useState(() => window.location.hash === '#settings')
+  /** A full page in place of the library and workspace, opened from the rail. */
+  const [page, setPage] = useState<'models' | 'settings' | null>(() =>
+    window.location.hash === '#models' ? 'models' : window.location.hash === '#settings' ? 'settings' : null,
+  )
   const [menuOpen, setMenuOpen] = useState(false)
-  const [kitMenuOpen, setKitMenuOpen] = useState(false)
   const modelBtn = useRef<HTMLButtonElement>(null)
-  const kitBtn = useRef<HTMLButtonElement>(null)
 
   // --- kits --------------------------------------------------------------
   const [manifest, setManifest] = useState<Manifest | null>(null)
@@ -228,6 +231,7 @@ export default function App() {
   // menu and the browser.
   useEffect(() => startSnapshotSync(), [])
   useEffect(() => setPriority(settings.modelPriority), [settings.modelPriority])
+  useEffect(() => void setQuantization(settings.quantize), [settings.quantize])
 
   useEffect(() => {
     loadManifest().then(setManifest, (e: Error) => setManifestError(e.message))
@@ -237,8 +241,7 @@ export default function App() {
   useEffect(
     () =>
       window.jemero?.onMenu((which) => {
-        if (which === 'models') setBrowserOpen(true)
-        else setSettingsOpen(true)
+        setPage(which)
       }),
     [],
   )
@@ -376,7 +379,7 @@ export default function App() {
       // Nothing built yet (a first attempt failed): whatever was asked is the build.
       if (!base) mode = 'build'
 
-      const kit: KitId = mode === 'port' && portKit ? portKit : (base?.kit ?? settings.kit)
+      const kit: KitId = mode === 'port' && portKit ? portKit : (base?.kit ?? NEW_KIT)
       const system = buildSystem({
         base: effectivePrompt(settings),
         kit,
@@ -565,15 +568,6 @@ export default function App() {
     [selectedId, viewed],
   )
 
-  const pickKit = useCallback(
-    (kit: KitId) => {
-      setKitMenuOpen(false)
-      if (item && version && kit !== version.kit) void generate('port', '', kit)
-      else if (!item) setSettings({ kit })
-    },
-    [item, version, generate],
-  )
-
   const startNew = useCallback(() => {
     setSelectedId(null)
     requestAnimationFrame(() => composer.current?.focus())
@@ -606,7 +600,7 @@ export default function App() {
         ? { title: ERROR_TITLE[stageError.kind] ?? 'Error', message: stageError.detail, dismissable: true }
         : null
 
-  const currentKit = draftDone?.kit ?? version?.kit ?? settings.kit
+  const currentKit = draftDone?.kit ?? version?.kit ?? NEW_KIT
   const canvasKit = stage?.kit ?? currentKit
   const canvasTheme = settings.canvasTheme === 'app' ? appTheme : settings.canvasTheme
   const layout = (item?.kind ?? newKind) === 'section' ? 'fill' : 'center'
@@ -620,14 +614,69 @@ export default function App() {
       </p>
     ) : (
       <p className="warn">
-        No model is running yet.{' '}
-        <button className="link" onClick={() => setBrowserOpen(true)} title={serverStatus}>
-          Pick one for this Mac
+        No model running.{' '}
+        <button className="link" onClick={() => setPage('models')} title={serverStatus}>
+          Pick one
         </button>
-        . It downloads and starts by itself.
       </p>
     )
   ) : null
+
+  const composerEl = (
+    <div className="composer">
+      {item && version && !busy && (
+        <div className="chips">
+          {REFINE_CHIPS[item.kind].map((c) => (
+            <button key={c} className="chip-btn" onClick={() => void generate('refine', c)} disabled={!canAsk}>
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+      <textarea
+        ref={composer}
+        value={prompt}
+        placeholder={
+          !serverOk
+            ? serverLoading
+              ? 'Loading the model…'
+              : 'No model is serving. Pick one from the header'
+            : item
+              ? `Change ${item.name}: “make it compact”, “add a clear button”…`
+              : `Describe a ${newKind}: what it shows and how it behaves`
+        }
+        onChange={(e) => setPrompt(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
+        }}
+        rows={3}
+      />
+      <div className="composer-actions">
+        {busy ? (
+          <button className="stop" onClick={cancel}>
+            <span className="stop-icon" /> Stop · {PHASE_LABEL[phase as Exclude<Phase, 'idle'>]}
+            <span className="kbd">esc</span>
+          </button>
+        ) : (
+          <>
+            {item && version && (
+              <button
+                className="btn ghost review-btn"
+                onClick={() => void generate('review', '')}
+                disabled={!canAsk}
+                title="Ask the model for a critique you can apply"
+              >
+                Review
+              </button>
+            )}
+            <button className="send" onClick={submit} disabled={!canAsk || !prompt.trim()}>
+              {item ? 'Refine' : 'Generate'} <span className="kbd light">⌘↵</span>
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  )
 
   return (
     <div className="app">
@@ -636,38 +685,9 @@ export default function App() {
           <span className="logo">⬢</span>
           <div>
             <strong>Jemero</strong>
-            <span className="sub">component studio, on a local model</span>
           </div>
         </div>
         <div className="topbar-right">
-          <div className="model-anchor">
-            <button
-              className={`model-btn kit-btn${kitMenuOpen ? ' open' : ''}`}
-              ref={kitBtn}
-              onClick={() => setKitMenuOpen((v) => !v)}
-              disabled={busy}
-              title={item ? 'The kit this component is built with' : 'The kit new components are built with'}
-              aria-haspopup="menu"
-              aria-expanded={kitMenuOpen}
-            >
-              <svg className="kit-glyph" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round">
-                <path d="M12 2 3 7l9 5 9-5-9-5zM3 12l9 5 9-5M3 17l9 5 9-5" />
-              </svg>
-              <span className="model-name">{kitById(currentKit).name}</span>
-              <svg className="model-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
-            {kitMenuOpen && (
-              <KitMenu
-                anchorRef={kitBtn}
-                current={currentKit}
-                portTarget={item && version ? item.name : null}
-                onPick={pickKit}
-                onClose={() => setKitMenuOpen(false)}
-              />
-            )}
-          </div>
           <div className="model-anchor">
             <button
               className={`model-btn${menuOpen ? ' open' : ''}`}
@@ -689,33 +709,78 @@ export default function App() {
                 onClose={() => setMenuOpen(false)}
                 onBrowse={() => {
                   setMenuOpen(false)
-                  setBrowserOpen(true)
+                  setPage('models')
                 }}
                 onActive={(id) => setModel(id)}
               />
             )}
           </div>
-          <button className="icon-btn" onClick={() => setSettingsOpen(true)} title="Settings" aria-label="Settings">
-            {/* Gear (Lucide "settings", ISC licence). */}
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        </div>
+      </header>
+
+      <QuantizeDialog />
+
+      <div className={`body${page ? ' on-page' : !item ? ' on-start' : ''}`}>
+        <nav className="rail" aria-label="Main">
+          <button className={`rail-btn${!selectedId && !page ? ' active' : ''}`} onClick={() => {
+              setPage(null)
+              startNew()
+            }} title="New chat" aria-label="New chat">
+            {/* Lucide "square-pen" (ISC licence). */}
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z" />
+            </svg>
+          </button>
+          <button className={`rail-btn${page === 'models' ? ' active' : ''}`} onClick={() => setPage((p) => (p === 'models' ? null : 'models'))} title="Models" aria-label="Models">
+            {/* Lucide "cpu" (ISC licence). */}
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+              <rect x="9" y="9" width="6" height="6" />
+              <path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2" />
+            </svg>
+          </button>
+          <button className="rail-btn" disabled title="Resources (coming soon)" aria-label="Resources (coming soon)">
+            {/* Lucide "book-open" (ISC licence). */}
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 7v14" />
+              <path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
+            </svg>
+          </button>
+          <div className="rail-spacer" />
+          <button className={`rail-btn${page === 'settings' ? ' active' : ''}`} onClick={() => setPage((p) => (p === 'settings' ? null : 'settings'))} title="Settings" aria-label="Settings">
+            {/* Lucide "settings" (ISC licence). */}
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
               <circle cx="12" cy="12" r="3" />
             </svg>
           </button>
-        </div>
-      </header>
-
-      <ModelBrowser
-        open={browserOpen}
-        onClose={() => {
-          setBrowserOpen(false)
-          if (window.location.hash === '#models') window.location.hash = ''
-        }}
-        onActive={(id) => setModel(id)}
-      />
-      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-
-      <div className="body">
+        </nav>
+        {page === 'settings' && <SettingsPage onClose={() => setPage(null)} />}
+        {page === 'models' && (
+          <ModelBrowser
+            open
+            onClose={() => {
+              setPage(null)
+              if (window.location.hash === '#models') window.location.hash = ''
+            }}
+            onActive={(id) => setModel(id)}
+          />
+        )}
+        {!item && !page && (
+          <section className="start">
+            <h1>What should we build?</h1>
+            {composerEl}
+            <div className="segmented kind-switch" role="radiogroup" aria-label="Size">
+              {(['component', 'block', 'section'] as Kind[]).map((k) => (
+                <button key={k} className={newKind === k ? 'seg active' : 'seg'} onClick={() => setNewKind(k)} role="radio" aria-checked={newKind === k}>
+                  {KIND_LABEL[k]}
+                </button>
+              ))}
+            </div>
+            {serverNotice}
+          </section>
+        )}
         <section className="side">
           <Library
             items={library.items}
@@ -726,79 +791,29 @@ export default function App() {
             onDelete={remove}
           />
 
-          <Conversation
-            item={item}
-            draft={draft}
-            phaseLabel={phase === 'idle' ? null : PHASE_LABEL[phase]}
-            thought={thought}
-            showThought={settings.showReasoning}
-            busy={busy}
-            viewedVersion={viewedN}
-            newKind={newKind}
-            onKind={setNewKind}
-            examples={EXAMPLES[newKind]}
-            onExample={(ex) => {
-              setPrompt(ex)
-              composer.current?.focus()
-            }}
-            onVersion={showVersion}
-            onApplyReview={applyReview}
-            notice={serverNotice}
-          />
-
-          <div className="composer">
-            {item && version && !busy && (
-              <div className="chips">
-                {REFINE_CHIPS[item.kind].map((c) => (
-                  <button key={c} className="chip-btn" onClick={() => void generate('refine', c)} disabled={!canAsk}>
-                    {c}
-                  </button>
-                ))}
-              </div>
-            )}
-            <textarea
-              ref={composer}
-              value={prompt}
-              placeholder={
-                !serverOk
-                  ? serverLoading
-                    ? 'Loading the model…'
-                    : 'No model is serving. Pick one from the header'
-                  : item
-                    ? `Change ${item.name}: “make it compact”, “add a clear button”…`
-                    : `Describe a ${newKind}: what it shows and how it behaves`
-              }
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
+          {item && (
+            <Conversation
+              item={item}
+              draft={draft}
+              phaseLabel={phase === 'idle' ? null : PHASE_LABEL[phase]}
+              thought={thought}
+              showThought={settings.showReasoning}
+              busy={busy}
+              viewedVersion={viewedN}
+              newKind={newKind}
+              onKind={setNewKind}
+              examples={EXAMPLES[newKind]}
+              onExample={(ex) => {
+                setPrompt(ex)
+                composer.current?.focus()
               }}
-              rows={3}
+              onVersion={showVersion}
+              onApplyReview={applyReview}
+              notice={serverNotice}
             />
-            <div className="composer-actions">
-              {busy ? (
-                <button className="stop" onClick={cancel}>
-                  <span className="stop-icon" /> Stop · {PHASE_LABEL[phase as Exclude<Phase, 'idle'>]}
-                  <span className="kbd">esc</span>
-                </button>
-              ) : (
-                <>
-                  {item && version && (
-                    <button
-                      className="btn ghost review-btn"
-                      onClick={() => void generate('review', '')}
-                      disabled={!canAsk}
-                      title="Ask the model for a critique you can apply"
-                    >
-                      Review
-                    </button>
-                  )}
-                  <button className="send" onClick={submit} disabled={!canAsk || !prompt.trim()}>
-                    {item ? 'Refine' : 'Generate'} <span className="kbd light">⌘↵</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
+          )}
+
+          {item && composerEl}
         </section>
 
         <section className="workspace">
@@ -944,9 +959,9 @@ export default function App() {
                         <p>{PHASE_LABEL[phase as Exclude<Phase, 'idle'>]}</p>
                       </>
                     ) : item ? (
-                      <p>{item.versions.length ? 'Loading…' : 'Not built yet. Describe it on the left.'}</p>
+                      <p>{item.versions.length ? 'Loading…' : 'Not built yet'}</p>
                     ) : (
-                      <p>Your component renders here, live and interactive.</p>
+                      <p>Preview</p>
                     )}
                   </div>
                 )}

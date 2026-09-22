@@ -6,7 +6,7 @@
 // museum. Each field notes where it takes effect.
 import { useSyncExternalStore } from 'react'
 import { SYSTEM_PROMPT } from './systemPrompt'
-import type { KitId } from './kits'
+import { isKitId, type KitId } from './kits'
 import type { Priority } from './models'
 
 export type Theme = 'system' | 'dark' | 'light'
@@ -44,6 +44,10 @@ export type Settings = {
   autoSwitchTabs: boolean
   /** What the model recommendation optimises for. */
   modelPriority: Priority
+  /** Prefer 4-bit model files: lighter, faster, a little less precise (electron/catalog.cjs). */
+  quantize: boolean
+  /** Ask about quantization when the app starts, until "Don't show again". */
+  quantizePrompt: boolean
   /** The kit new components are built with. */
   kit: KitId
   /** Canvas: light or dark, or follow the app. */
@@ -66,6 +70,8 @@ export const DEFAULTS: Settings = {
   autoFixImports: true,
   autoSwitchTabs: false,
   modelPriority: 'balanced',
+  quantize: false,
+  quantizePrompt: true,
   kit: 'shadcn',
   canvasTheme: 'app',
   canvasBg: 'dots',
@@ -99,10 +105,12 @@ const KEY = 'jemero.settings.v1'
 function load(): Settings {
   try {
     const fromApp = window.jemero?.settings.load() as Partial<Settings> | null | undefined
-    if (fromApp) return { ...DEFAULTS, ...fromApp }
-    const raw = localStorage.getItem(KEY)
+    const raw = fromApp ? null : localStorage.getItem(KEY)
     // Merge over defaults so a new field in a later version doesn't read undefined.
-    return raw ? { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Settings>) } : DEFAULTS
+    const saved = fromApp ?? (raw ? (JSON.parse(raw) as Partial<Settings>) : null)
+    if (!saved) return DEFAULTS
+    const merged = { ...DEFAULTS, ...saved }
+    return isKitId(merged.kit) ? merged : { ...merged, kit: DEFAULTS.kit }
   } catch {
     return DEFAULTS
   }

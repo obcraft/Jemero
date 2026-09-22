@@ -40,7 +40,7 @@ API key, nothing to install.
 | **Sized to your Mac** | Jemero reads your chip and memory and marks the best model that fits, already quantized for speed. |
 | **One-click models** | 43 verified coding and general models, starting at 135M parameters, and a search that finds any chat model on Hugging Face (Gemma, Llama, Phi, Qwen…), sized for your Mac the same way. Downloads resume if interrupted and are checked against Hugging Face's SHA-256. |
 | **Any component** | Components (pickers, inputs, menus), blocks (forms, cards, panels) or full-width sections (heroes, pricing, footers). |
-| **Your UI kit** | shadcn/ui, Headless UI, plain Tailwind, Material UI or Mantine, bundled in the app. Switch kits and Jemero rebuilds the component with the new one. |
+| **Your UI kit** | shadcn/ui or plain Tailwind, bundled in the app. Switch kits and Jemero rebuilds the component with the new one. |
 | **Live canvas** | Only the component, rendered offline in milliseconds, with its states side by side, light/dark and phone/tablet/desktop widths. |
 | **Refine and review** | Plan first, then code. Ask for a review, tick the points worth fixing, apply them. Every change is a version you can go back to. |
 | **Private** | Everything happens on your Mac. Nothing you type leaves it. |
@@ -207,7 +207,7 @@ prompt ──► llama-server (built in, Metal) ──► <plan> + <file> ──
 | `electron/hardware.cjs` · `catalog.cjs` | Read the Mac (chip, memory, GPU cores, bandwidth) and rank the model catalog for it. |
 | `electron/hub.cjs` · `gguf.cjs` | Hugging Face search: finds GGUF chat models, reads each one's header over a range request, and sizes it with the catalog's own rules. |
 | `electron/install.cjs` | The model store: resumable, SHA-256-verified downloads. A model found through search keeps its catalog entry in its `model.json`. |
-| `scripts/kits.mjs` | Bundles every kit package (React 19, Radix, Headless UI, MUI, Mantine, lucide, motion…) as shared-chunk ESM into `public/kits`, with an import map and a manifest of every export. |
+| `scripts/kits.mjs` | Bundles every kit package (React 19, Radix, lucide, motion…) as shared-chunk ESM into `public/kits`, with an import map and a manifest of every export. |
 | `kits/` | The canvas (`stage.html`, `stage.js`), the shadcn/ui sources and the Tailwind theme. |
 | `src/lib/compile.ts` | Adds forgotten imports, maps icon names onto lucide, rewrites deep imports, rejects what isn't installed with a message the model can act on, then transpiles with sucrase. |
 | `src/lib/systemPrompt.ts` · `kits.ts` | The brief: base rules, the kit's API notes, and the size of what's being built. Follow-ups are stateless: current code plus earlier requests. |

@@ -3,7 +3,7 @@
 // modules components usually come from, and what the model needs to know to
 // use them without guessing.
 
-export type KitId = 'shadcn' | 'headless' | 'tailwind' | 'mui' | 'mantine'
+export type KitId = 'shadcn' | 'tailwind'
 
 export type Kit = {
   id: KitId
@@ -57,28 +57,6 @@ USAGE THAT MATTERS:
 - ${TOKENS}`,
   },
   {
-    id: 'headless',
-    name: 'Headless UI',
-    blurb: 'Unstyled accessible primitives + Tailwind',
-    tailwind: true,
-    autoImport: () => ['@headlessui/react', '@/lib/utils'],
-    prompt: () => `KIT: Headless UI v2 + Tailwind CSS v4: accessible, unstyled primitives that you style.
-  import { Combobox, ComboboxInput, ComboboxOptions, ComboboxOption } from '@headlessui/react'
-Components: Menu, MenuButton, MenuItems, MenuItem, MenuSection, MenuHeading, MenuSeparator; Listbox, ListboxButton,
-ListboxOptions, ListboxOption; Combobox, ComboboxInput, ComboboxButton, ComboboxOptions, ComboboxOption; Popover,
-PopoverButton, PopoverPanel; Dialog, DialogPanel, DialogTitle, DialogBackdrop; Disclosure, DisclosureButton,
-DisclosurePanel; TabGroup, TabList, Tab, TabPanels, TabPanel; Switch; RadioGroup, Radio; Checkbox; Field, Label,
-Description, Input, Textarea, Select, Fieldset, Legend; Transition; CloseButton.
-${EXTRAS} cn() from '@/lib/utils' merges classes.
-
-USAGE THAT MATTERS:
-- Floating panels position themselves with anchor: <MenuItems anchor="bottom start">, <ComboboxOptions anchor="bottom">.
-- Style state through data attributes: data-focus:bg-accent, data-selected:font-medium, data-open:rotate-180,
-  data-checked:bg-primary, data-disabled:opacity-50.
-- Combobox filtering is yours: keep a query in state and filter the options from it.
-- ${TOKENS}`,
-  },
-  {
     id: 'tailwind',
     name: 'Tailwind CSS',
     blurb: 'No component library, just utilities',
@@ -90,46 +68,12 @@ ${EXTRAS} cn() from '@/lib/utils' merges classes.
 
 - ${TOKENS}`,
   },
-  {
-    id: 'mui',
-    name: 'Material UI',
-    blurb: 'Google Material Design components',
-    tailwind: false,
-    autoImport: () => ['@mui/material'],
-    prompt: () => `KIT: Material UI v7 (@mui/material) with Emotion. ThemeProvider and CssBaseline already wrap the canvas.
-  import { Autocomplete, TextField, InputAdornment, Stack, Paper } from '@mui/material'
-Use named imports from '@mui/material'. Style with the sx prop, or styled() from '@mui/material/styles'. No Tailwind.
-Icons come from lucide-react, not @mui/icons-material: <Search size={18} />.
-${EXTRAS}
-
-USAGE THAT MATTERS:
-- Searchable select: <Autocomplete options={options} renderInput={(params) => <TextField {...params} label="Search" />} />
-- Adornments: <TextField slotProps={{ input: { startAdornment: <InputAdornment position="start"><Search size={16} /></InputAdornment> } }} />
-- Grid: <Grid container spacing={2}><Grid size={{ xs: 12, md: 6 }}>…</Grid></Grid> (no item or xs props). Stack and Box are simpler.
-- Colours from the theme so dark mode works: 'primary.main', 'text.secondary', 'background.paper', 'divider'.`,
-  },
-  {
-    id: 'mantine',
-    name: 'Mantine',
-    blurb: 'Full-featured components and hooks',
-    tailwind: false,
-    autoImport: () => ['@mantine/core', '@mantine/hooks'],
-    prompt: () => `KIT: Mantine v8 (@mantine/core, @mantine/hooks). MantineProvider and its styles already wrap the canvas.
-  import { Combobox, useCombobox, TextInput, Group, Stack, Paper } from '@mantine/core'
-  import { useDisclosure, useDebouncedValue } from '@mantine/hooks'
-Style with component props (variant, size, radius, c, fw) and style props (p, m, w, maw, gap). No Tailwind.
-Icons come from lucide-react: <Search size={16} />.
-${EXTRAS}
-
-USAGE THAT MATTERS:
-- Searchable select: <Select searchable data={['React', 'Vue']} value={v} onChange={setV} />, or Combobox + useCombobox
-  for custom option rows.
-- Inputs: <TextInput leftSection={<Search size={16} />} value={q} onChange={(e) => setQ(e.currentTarget.value)} />
-- Layout: Group (row), Stack (column), SimpleGrid, Card withBorder, Paper.`,
-  },
 ]
 
 export const kitById = (id: KitId | string | undefined): Kit => KITS.find((k) => k.id === id) ?? KITS[0]
+
+/** Kits that were once offered (Headless UI, Material UI, Mantine) fall back to shadcn/ui. */
+export const isKitId = (id: unknown): id is KitId => KITS.some((k) => k.id === id)
 
 let manifest: Promise<Manifest> | null = null
 

@@ -52,18 +52,11 @@ const PACKAGES = [
   'input-otp',
   'react-day-picker',
   'recharts',
-  '@headlessui/react',
-  '@mui/material',
-  '@mui/material/styles',
-  '@emotion/react',
-  '@emotion/styled',
-  '@mantine/core',
-  '@mantine/hooks',
 ]
 
 const IDENT = /^[A-Za-z_$][\w$]*$/
 
-/** "react-dom/client" -> "react-dom__client", "@mui/material" -> "mui__material". */
+/** "react-dom/client" -> "react-dom__client", "motion/react" -> "motion__react". */
 const fileName = (spec) => spec.replace(/^@/, '').replace(/\//g, '__')
 
 function walk(dir) {
@@ -231,7 +224,6 @@ async function main() {
   fs.copyFileSync(path.join(pkgDir('@tailwindcss/browser'), 'dist', 'index.global.js'), path.join(OUT, 'tailwind.js'))
   const animate = fs.readFileSync(path.join(pkgDir('tw-animate-css'), 'dist', 'tw-animate.css'), 'utf8')
   fs.writeFileSync(path.join(OUT, 'tailwind-theme.css'), `${fs.readFileSync(path.join(KITS, 'tailwind-theme.css'), 'utf8')}\n${animate}\n`)
-  fs.copyFileSync(path.join(pkgDir('@mantine/core'), 'styles.css'), path.join(OUT, 'mantine.css'))
   fs.copyFileSync(path.join(KITS, 'stage.js'), path.join(OUT, 'stage.js'))
   const stage = fs.readFileSync(path.join(KITS, 'stage.html'), 'utf8')
   fs.writeFileSync(path.join(OUT, 'stage.html'), stage.replace('/*IMPORTMAP*/', JSON.stringify({ imports }, null, 2)))

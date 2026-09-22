@@ -116,7 +116,39 @@ textarea:focus-visible,
 .dot.ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
 .dot.bad { background: var(--bad); }
 
-.body { flex: 1; display: grid; grid-template-columns: minmax(310px, 25%) 1fr; min-height: 0; }
+.body { flex: 1; display: grid; grid-template-columns: 52px minmax(310px, 25%) 1fr; min-height: 0; }
+
+/* Settings (and later pages) take the place of the library and workspace. Those
+   stay mounted, only hidden, so the canvas and a running generation carry on. */
+.body.on-page { grid-template-columns: 52px 1fr; }
+.body.on-page > .side, .body.on-page > .workspace { display: none; }
+.page { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); }
+.page-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 24px 12px; background: var(--panel);
+}
+.page-tabs { padding-left: 18px; background: var(--panel); }
+.page-toolbar { padding: 0 24px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.page-body { flex: 1; overflow-y: auto; padding: 20px 24px 32px; }
+.page-inner { max-width: 720px; margin: 0 auto; }
+
+/* --- icon rail, far left -------------------------------------------------- */
+.rail {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px 0; border-right: 1px solid var(--line); background: var(--panel);
+}
+.rail-spacer { flex: 1; }
+.rail-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0;
+  background: none; border: 1px solid transparent; border-radius: 9px;
+  color: var(--muted); cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-2) var(--ease);
+}
+.rail-btn:hover:not(:disabled) { background: var(--panel-2); color: var(--text); }
+.rail-btn:active:not(:disabled) { transform: scale(0.94); }
+.rail-btn.active { background: var(--panel-2); border-color: var(--line); color: var(--accent-text); }
+.rail-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* --- model button + menu ------------------------------------------------- */
 .model-anchor { position: relative; }
@@ -163,8 +195,6 @@ textarea:focus-visible,
 .menu-sub { font-size: 10.5px; color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
 .menu-sub.plain { font-family: inherit; font-size: 11px; }
 .menu-note { padding: 6px 9px 7px; font-size: 10.5px; color: var(--faint); }
-.kit-menu { width: 290px; }
-.kit-btn .kit-glyph { color: var(--accent-text); flex-shrink: 0; }
 .model-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .menu-sep { height: 1px; background: var(--line); margin: 6px 4px; }
 .menu-empty { padding: 10px 9px; font-size: 12px; color: var(--muted); }
@@ -642,6 +672,9 @@ textarea.code.editor:focus { outline: none; border: 0; }
   transition: transform var(--dur-2) var(--ease), background-color var(--dur-2) var(--ease);
 }
 .switch.on { background: var(--accent); border-color: var(--accent); }
+.switch:disabled { opacity: 0.45; cursor: not-allowed; }
+.warn-note { color: var(--warn); border-left: 2px solid var(--warn); padding-left: 10px; margin-top: 12px; }
+.check-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
 .switch.on .switch-knob { transform: translateX(16px); background: #fff; }
 
 .range {

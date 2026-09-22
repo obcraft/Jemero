@@ -12,7 +12,7 @@ const { spawn, execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 const { detect } = require('./hardware.cjs')
-const { recommend, planFor, TARGET_CTX } = require('./catalog.cjs')
+const { recommend, planFor, lightSibling, TARGET_CTX } = require('./catalog.cjs')
 const { installed, ggufPath, adoptAtomicChatModels } = require('./install.cjs')
 const { ensureRuntime, appSupport } = require('./runtime.cjs')
 
@@ -95,6 +95,7 @@ async function choose() {
 
   const order = [
     process.env.JEMERO_MODEL,
+    lightSibling(readState().chosen, local),
     readState().chosen,
     recommended,
     ...[...local].sort((a, b) => (byId.get(b)?.score ?? 0) - (byId.get(a)?.score ?? 0)),

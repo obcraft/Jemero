@@ -328,6 +328,45 @@ const MIN_CTX = 512
 const SPEED_TARGETS = { speed: 35, balanced: 20, quality: 10 }
 const SPEED_TARGET = SPEED_TARGETS.balanced
 
+/**
+ * The quantization switch (startup dialog, Settings): pick 4-bit weights when a
+ * model has a 4-bit file that fits. About half the memory of 8-bit and roughly
+ * twice the decode speed, for a couple of quality points. Weights only: the KV
+ * cache stays f16 for the reasons in model.cjs.
+ */
+const LIGHT_QUANT = /^(UD-)?(I?Q4|MXFP4)/
+let preferLight = false
+
+function setPreferLight(on) {
+  preferLight = !!on
+}
+
+/** Whether the switch can do anything here: some model must fit this Mac at 4-bit. */
+function quantizationSupport(device) {
+  const fits = CATALOG.some((entry) =>
+    entry.quants.some((q) => LIGHT_QUANT.test(q.tag) && evaluate(entry, q, device).fits),
+  )
+  return fits
+    ? { supported: true, reason: null }
+    : { supported: false, reason: `No 4-bit model fits in this Mac’s ${device.budgetGB} GB model budget.` }
+}
+
+/**
+ * With the switch on, the 4-bit file of the same model, if it's downloaded.
+ * So turning it on takes effect at the next launch without a new download.
+ */
+function lightSibling(modelId, installedIds) {
+  if (!preferLight || !modelId) return null
+  const found = entryFor(modelId)
+  if (!found || LIGHT_QUANT.test(found.quant.tag)) return null
+  return (
+    found.entry.quants
+      .filter((q) => LIGHT_QUANT.test(q.tag))
+      .map((q) => localId(found.entry, q))
+      .find((id) => installedIds.includes(id)) ?? null
+  )
+}
+
 /** The server keeps llama.cpp's default f16 KV cache (see model.cjs). */
 const KV_RATIO = 1
 
@@ -458,7 +497,9 @@ function evaluate(entry, quant, device, target = SPEED_TARGET) {
 function bestPlan(entry, device, target = SPEED_TARGET) {
   const options = entry.quants.map((q) => evaluate(entry, q, device, target))
   const fitting = options.filter((o) => o.fits)
-  if (fitting.length) return fitting.reduce((a, b) => (b.score > a.score ? b : a))
+  const light = preferLight ? fitting.filter((o) => LIGHT_QUANT.test(o.quant)) : []
+  const pool = light.length ? light : fitting
+  if (pool.length) return pool.reduce((a, b) => (b.score > a.score ? b : a))
   // Smallest quant, so the "needs N GB" we print is the kindest true number.
   return options.reduce((a, b) => (b.bytes < a.bytes ? b : a))
 }
@@ -526,6 +567,9 @@ module.exports = {
   remember,
   localId,
   downloadUrl,
+  setPreferLight,
+  quantizationSupport,
+  lightSibling,
   SPEED_TARGET,
   SPEED_TARGETS,
   TARGET_CTX,

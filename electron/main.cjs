@@ -4,7 +4,7 @@ const net = require('node:net')
 const path = require('node:path')
 const { ensureModel, switchModel, probe, stopServing } = require('./model.cjs')
 const { detect, describe } = require('./hardware.cjs')
-const { recommend, planFor, entryFor } = require('./catalog.cjs')
+const { recommend, planFor, entryFor, setPreferLight, quantizationSupport } = require('./catalog.cjs')
 const hub = require('./hub.cjs')
 const models = require('./install.cjs')
 const runtime = require('./runtime.cjs')
@@ -207,6 +207,9 @@ function registerModelIpc() {
 
   ipcMain.handle('models:device', () => ({ ...detect(), summary: describe() }))
 
+  ipcMain.handle('models:quantization', () => quantizationSupport(detect()))
+  ipcMain.handle('models:set-quantization', (_e, on) => setPreferLight(on))
+
   ipcMain.handle('models:catalog', async (_e, priority = 'balanced') => {
     const device = detect()
     const { models: ranked, recommended, reasons } = recommend(device, priority)
@@ -281,6 +284,13 @@ async function bootstrap() {
   registerStoreIpc('settings', { pretty: true })
   registerStoreIpc('library')
   registerModelIpc()
+  // Before ensureModel, so the model picked at launch already follows the switch.
+  try {
+    const saved = JSON.parse(require('node:fs').readFileSync(path.join(runtime.appSupport(), 'settings.json'), 'utf8'))
+    setPreferLight(saved?.quantize === true)
+  } catch {
+    /* first launch: no settings yet */
+  }
   createWindow()
   showBootScreen('Starting…')
 

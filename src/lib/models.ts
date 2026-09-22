@@ -86,6 +86,8 @@ type Bridge = {
   /** The component library (lib/library.ts), kept in library.json. */
   library: { load(): unknown; save(value: unknown): void }
   device(): Promise<Device>
+  quantization(): Promise<{ supported: boolean; reason: string | null }>
+  setQuantization(on: boolean): Promise<void>
   catalog(priority?: Priority): Promise<CatalogSnapshot>
   search(query: string, priority?: Priority, page?: number): Promise<SearchResult>
   chatBudget(request: { messages: { role: string; content: string }[]; maxTokens: number; thinking: boolean }): Promise<{ maxTokens: number; context: number }>
@@ -120,6 +122,17 @@ let priority: Priority = 'balanced'
 export function setPriority(next: Priority) {
   if (next === priority) return
   priority = next
+  void loadSnapshot(true)
+}
+
+let quantize: boolean | null = null
+
+/** The quantization switch re-ranks the catalog too. */
+export async function setQuantization(next: boolean) {
+  const api = bridge()
+  if (!api || next === quantize) return
+  quantize = next
+  await api.setQuantization(next)
   void loadSnapshot(true)
 }
 const watchers = new Set<() => void>()

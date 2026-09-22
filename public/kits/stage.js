@@ -154,7 +154,7 @@ class Boundary extends React.Component {
 
 // --- kits ----------------------------------------------------------------
 
-const TAILWIND_KITS = new Set(['shadcn', 'headless', 'tailwind'])
+const TAILWIND_KITS = new Set(['shadcn', 'tailwind'])
 
 const loadScript = (src) =>
   new Promise((resolve, reject) => {
@@ -177,20 +177,6 @@ async function loadKit(id) {
     document.head.appendChild(style)
     await loadScript('./tailwind.js')
     return Passthrough
-  }
-  if (id === 'mui') {
-    const mui = await import('@mui/material')
-    const themes = {}
-    const themeFor = (mode) => (themes[mode] ??= mui.createTheme({ palette: { mode } }))
-    return ({ theme, children }) => h(mui.ThemeProvider, { theme: themeFor(theme) }, h(mui.CssBaseline), children)
-  }
-  if (id === 'mantine') {
-    const link = document.createElement('link')
-    link.rel = 'stylesheet'
-    link.href = './mantine.css'
-    document.head.appendChild(link)
-    const mantine = await import('@mantine/core')
-    return ({ theme, children }) => h(mantine.MantineProvider, { forceColorScheme: theme }, children)
   }
   return Passthrough
 }
