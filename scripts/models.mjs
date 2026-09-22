@@ -6,6 +6,8 @@
 //   npm run models                 what this Mac should run, and why
 //   npm run models:install         download the recommended model
 //   npm run models -- --install qwen2.5-coder-7b
+//   npm run models -- --search "gemma 1b"   any chat model on Hugging Face
+//   npm run models -- --search "gemma 1b" --install ggml-org/gemma-3-1b-it-Q8_0
 //   npm run models -- --json
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -14,7 +16,8 @@ import path from 'node:path'
 const require = createRequire(import.meta.url)
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const { detect, describe } = require(path.join(root, 'electron/hardware.cjs'))
-const { recommend, planFor } = require(path.join(root, 'electron/catalog.cjs'))
+const { recommend, planFor, entryFor } = require(path.join(root, 'electron/catalog.cjs'))
+const hub = require(path.join(root, 'electron/hub.cjs'))
 const store = require(path.join(root, 'electron/install.cjs'))
 const runtime = require(path.join(root, 'electron/runtime.cjs'))
 
@@ -41,6 +44,32 @@ for (const id of installedIds) {
   if (!models.some((m) => m.modelId === id)) {
     const plan = planFor(id, device)
     if (plan) models.push(plan)
+  }
+}
+
+if (flag('--search')) {
+  const query = valueFor('--search')
+  if (!query || query.startsWith('--')) {
+    console.error('Usage: npm run models -- --search "gemma 1b"')
+    process.exit(1)
+  }
+  // Searching is also what makes a result installable: with --install, carry on below.
+  const found = await hub.search(query, device, priority)
+  if (!flag('--install')) {
+    if (flag('--json')) {
+      console.log(JSON.stringify(found, null, 2))
+      process.exit(0)
+    }
+    console.log(`\n  Hugging Face · “${query}” · sized for ${device.budgetGB} GB\n`)
+    if (!found.length) console.log('  No chat model matches.\n')
+    for (const m of found) {
+      const note = m.fits ? m.modelId : m.limit === 'context' ? `${m.maxCtx / 1024}k context, needs 16k` : `needs ≈${m.needsGB} GB`
+      console.log(
+        `  ${m.label.slice(0, 34).padEnd(34)} ${m.quant.padEnd(11)} ${(m.sizeGB + ' GB').padStart(7)} ${(m.tokensPerSec + ' tok/s').padStart(9)}  ${note}`,
+      )
+    }
+    if (found.some((m) => m.fits)) console.log(`\n  Install one:  npm run models -- --search "${query}" --install <id>\n`)
+    process.exit(0)
   }
 }
 
@@ -76,7 +105,9 @@ if (flag('--install')) {
   console.log(`→ ${store.modelDir(pick.modelId)}\n`)
 
   let lastLine = 0
-  const res = await store.install(pick, (p) => {
+  // A search result keeps its catalog entry in model.json, as it does from the app.
+  const { entry } = entryFor(pick.modelId)
+  const res = await store.install(entry.source === 'hub' ? { ...pick, entry } : pick, (p) => {
     if (p.phase === 'downloading' || p.phase === 'resuming') {
       const now = Date.now()
       if (now - lastLine < 500) return

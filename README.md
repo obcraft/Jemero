@@ -38,7 +38,7 @@ API key, nothing to install.
 |---|---|
 | **Built-in AI runtime** | llama.cpp ships inside the app and runs on the GPU. No terminal, no other apps. |
 | **Sized to your Mac** | Jemero reads your chip and memory and marks the best model that fits, already quantized for speed. |
-| **One-click models** | 15 verified coding models. Downloads resume if interrupted and are checked against Hugging Face's SHA-256. |
+| **One-click models** | 15 verified coding models, and a search that finds any chat model on Hugging Face (Gemma, Llama, Phi, Qwen…), sized for your Mac the same way. Downloads resume if interrupted and are checked against Hugging Face's SHA-256. |
 | **Any component** | Components (pickers, inputs, menus), blocks (forms, cards, panels) or full-width sections (heroes, pricing, footers). |
 | **Your UI kit** | shadcn/ui, Headless UI, plain Tailwind, Material UI or Mantine, bundled in the app. Switch kits and Jemero rebuilds the component with the new one. |
 | **Live canvas** | Only the component, rendered offline in milliseconds, with its states side by side, light/dark and phone/tablet/desktop widths. |
@@ -101,6 +101,14 @@ Every size in the catalog is the real byte count of the real file, and every KV 
 comes from the model's own config, so "too big" is a fact, not a guess. Run
 `npm run models` to see the ranking for your own Mac.
 
+**Search** goes beyond the catalog: type a name (`gemma 1b`, `llama 3b`, `phi 4`) and
+Jemero asks Hugging Face for GGUF chat models, folds the many uploads of one model into a
+single row, and sizes each for your Mac with the same rules. Nothing is guessed there
+either: file sizes and checksums come from the Hub, and layers, KV heads, sliding-window
+layout and context length are read from the GGUF header itself (a few KB, fetched with a
+range request). A model with less than the 16k context this app needs is shown, but
+marked as such. `npm run models -- --search "gemma 1b"` does the same from a terminal.
+
 </details>
 
 ## How it works
@@ -158,8 +166,8 @@ npm run dist       # → release/Jemero-arm64.dmg
 |---|---|
 | `npm start` | Run the app in development |
 | `npm run kits` | Rebuild the canvas's UI kit bundles into `public/kits` (automatic when an input changed) |
-| `npm run models` | What this Mac should run, and why (`--priority speed\|quality`, `--json`) |
-| `npm run models:install` | Download the recommendation (`-- --install <id>` for another) |
+| `npm run models` | What this Mac should run, and why (`--priority speed\|quality`, `--json`, `--search "gemma 1b"`) |
+| `npm run models:install` | Download the recommendation (`-- --install <id>` for another, `-- --search "…" --install <id>` for a search result) |
 | `npm run serve` / `npm run stop` | Start / stop the model server without the window |
 | `npm run dist` | Build `release/Jemero-arm64.dmg` |
 | `npm run runtime` | Re-vendor the llama.cpp runtime into `vendor/llama` |
@@ -183,7 +191,8 @@ prompt ──► llama-server (built in, Metal) ──► <plan> + <file> ──
 | `electron/runtime.cjs` | The inference runtime: llama.cpp's official `llama-server`, pinned to one build. Bundled in the app, vendored for development, or fetched once as a fallback. |
 | `electron/model.cjs` | Starts, stops and switches the server; remembers your last model; only ever stops its own process. |
 | `electron/hardware.cjs` · `catalog.cjs` | Read the Mac (chip, memory, GPU cores, bandwidth) and rank the model catalog for it. |
-| `electron/install.cjs` | The model store: resumable, SHA-256-verified downloads. |
+| `electron/hub.cjs` · `gguf.cjs` | Hugging Face search: finds GGUF chat models, reads each one's header over a range request, and sizes it with the catalog's own rules. |
+| `electron/install.cjs` | The model store: resumable, SHA-256-verified downloads. A model found through search keeps its catalog entry in its `model.json`. |
 | `scripts/kits.mjs` | Bundles every kit package (React 19, Radix, Headless UI, MUI, Mantine, lucide, motion…) as shared-chunk ESM into `public/kits`, with an import map and a manifest of every export. |
 | `kits/` | The canvas (`stage.html`, `stage.js`), the shadcn/ui sources and the Tailwind theme. |
 | `src/lib/compile.ts` | Adds forgotten imports, maps icon names onto lucide, rewrites deep imports, rejects what isn't installed with a message the model can act on, then transpiles with sucrase. |

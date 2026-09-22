@@ -13,18 +13,30 @@ const { GB } = require('./hardware.cjs')
 
 const KiB = 1024
 
-/** Quality cost of quantization, in codingScore points. */
+/**
+ * Quality cost of quantization, in codingScore points. Also the list of
+ * quantizations a model found through search may be offered in.
+ */
 const QUANT_PENALTY = {
   Q8_0: 0,
+  'UD-Q8_K_XL': 0,
   'UD-Q6_K_XL': 0.4,
   Q6_K: 0.6,
   'UD-Q5_K_XL': 1.2,
   Q5_K_M: 1.5,
+  Q5_K_S: 1.8,
   MXFP4: 1.5, // native training precision for gpt-oss, not a post-hoc squeeze
+  MXFP4_MOE: 1.5,
   'UD-Q4_K_XL': 2.2, // importance-matrix quant: keeps more of the sensitive tensors
   Q4_K_M: 3,
+  Q4_0: 4.5, // plain 4-bit; the native format of quantization-aware-trained (QAT) weights
   Q4_K_S: 4.5,
+  // No IQ quants: on Metal their prompt processing is markedly slower, and a
+  // long wait for the first token is the one delay this app can't hide.
 }
+
+/** What Q4_0 costs a model that was trained for it (Google's QAT releases). */
+const QAT_Q4_0_PENALTY = 0.5
 
 /**
  * Below 4-bit, code generation starts dropping closing braces and inventing
@@ -319,6 +331,31 @@ const SPEED_TARGET = SPEED_TARGETS.balanced
 /** The server keeps llama.cpp's default f16 KV cache (see model.cjs). */
 const KV_RATIO = 1
 
+/**
+ * Models found through Hugging Face search (hub.cjs), by catalog id. They live
+ * here for the session; once one is downloaded, its model.json carries the
+ * entry, so it is still a first-class model after a restart.
+ */
+const discovered = new Map()
+
+function remember(entry) {
+  if (!CATALOG.some((e) => e.id === entry.id)) discovered.set(entry.id, entry)
+  return entry
+}
+
+/** The catalog entry and quant behind a local model id, wherever it came from. */
+function entryFor(modelId) {
+  for (const entry of [...CATALOG, ...discovered.values()]) {
+    const quant = entry.quants.find((q) => localId(entry, q) === modelId)
+    if (quant) return { entry, quant }
+  }
+  // Downloaded in an earlier session: the entry was saved next to the weights.
+  const { readManifest } = require('./install.cjs')
+  const saved = readManifest(modelId)?.entry
+  const quant = saved?.quants?.find((q) => localId(saved, q) === modelId)
+  return quant ? { entry: remember(saved), quant } : null
+}
+
 /** Local model id: org/<gguf basename>. Also the server's --alias. */
 function localId(entry, quant) {
   const org = entry.repo.split('/')[0]
@@ -366,7 +403,8 @@ function evaluate(entry, quant, device, target = SPEED_TARGET) {
   // 18 GB budget reads as the refusal it is instead of looking like a rounding bug.
   const total = quant.bytes + kv + RUNTIME_OVERHEAD
   const tokensPerSec = (device.effectiveBandwidthGBs * GB) / activeBytes(entry, quant.bytes)
-  const quality = entry.codingScore - (QUANT_PENALTY[quant.tag] ?? 3) - (entry.formatRisk ? 6 : 0)
+  const penalty = quant.tag === 'Q4_0' && entry.qat ? QAT_Q4_0_PENALTY : (QUANT_PENALTY[quant.tag] ?? 3)
+  const quality = entry.codingScore - penalty - (entry.formatRisk ? 6 : 0)
   const speedFactor = Math.min(1, tokensPerSec / target)
 
   return {
@@ -390,30 +428,35 @@ function evaluate(entry, quant, device, target = SPEED_TARGET) {
     blurb: entry.blurb,
     formatRisk: entry.formatRisk ?? null,
     fits: ctx !== null,
+    // Why it doesn't fit: a window shorter than the 16k this app needs, or memory.
+    limit: ctx !== null ? null : TARGET_CTX > entry.maxCtx ? 'context' : 'memory',
+    maxCtx: entry.maxCtx,
     needsGB: round(total / GB),
     score: ctx === null ? 0 : quality * (0.55 + 0.45 * speedFactor),
+    source: entry.source ?? 'catalog',
+    author: entry.repo.split('/')[0],
+    downloads: entry.downloads ?? null,
   }
 }
 
 /**
- * One row per model: its best-scoring quantization for this machine. Picking the
+ * A model's best-scoring quantization for this machine. Picking the
  * quantization is the engine's job, not the user's, that's the whole premise,
- * so only the winner is returned. Models that don't fit are returned too, marked
- * unfit, because "why not the big one?" is the first question anybody asks.
+ * so only the winner is returned. A model that doesn't fit comes back too,
+ * marked unfit, because "why not the big one?" is the first question anybody asks.
  */
+function bestPlan(entry, device, target = SPEED_TARGET) {
+  const options = entry.quants.map((q) => evaluate(entry, q, device, target))
+  const fitting = options.filter((o) => o.fits)
+  if (fitting.length) return fitting.reduce((a, b) => (b.score > a.score ? b : a))
+  // Smallest quant, so the "needs N GB" we print is the kindest true number.
+  return options.reduce((a, b) => (b.bytes < a.bytes ? b : a))
+}
+
+/** One row per catalog model, best first. */
 function rank(device, priority = 'balanced') {
   const target = SPEED_TARGETS[priority] ?? SPEED_TARGET
-  const rows = []
-  for (const entry of CATALOG) {
-    const options = entry.quants.map((q) => evaluate(entry, q, device, target))
-    const fitting = options.filter((o) => o.fits)
-    if (fitting.length) {
-      rows.push(fitting.reduce((a, b) => (b.score > a.score ? b : a)))
-    } else {
-      // Smallest quant, so the "needs N GB" we print is the kindest true number.
-      rows.push(options.reduce((a, b) => (b.bytes < a.bytes ? b : a)))
-    }
-  }
+  const rows = CATALOG.map((entry) => bestPlan(entry, device, target))
   rows.sort((a, b) => b.score - a.score || a.bytes - b.bytes)
   return rows
 }
@@ -454,16 +497,26 @@ function recommend(device, priority = 'balanced') {
  * and installing it must still resolve to that exact file.
  */
 function planFor(modelId, device) {
-  for (const entry of CATALOG) {
-    for (const quant of entry.quants) {
-      if (localId(entry, quant) === modelId) return evaluate(entry, quant, device)
-    }
-  }
-  return null
+  const found = entryFor(modelId)
+  return found ? evaluate(found.entry, found.quant, device) : null
 }
 
 function round(n) {
   return Math.round(n * 10) / 10
 }
 
-module.exports = { CATALOG, recommend, rank, planFor, localId, downloadUrl, SPEED_TARGET, SPEED_TARGETS, TARGET_CTX }
+module.exports = {
+  CATALOG,
+  QUANT_PENALTY,
+  recommend,
+  rank,
+  bestPlan,
+  planFor,
+  entryFor,
+  remember,
+  localId,
+  downloadUrl,
+  SPEED_TARGET,
+  SPEED_TARGETS,
+  TARGET_CTX,
+}

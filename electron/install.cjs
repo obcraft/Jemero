@@ -54,10 +54,22 @@ async function isInstalled(id) {
   return !!(await fsp.stat(ggufPath(id)).catch(() => null))
 }
 
-/** Provenance, so a folder on disk explains itself. Nothing reads it to run. */
+/**
+ * Provenance, so a folder on disk explains itself. A catalog model never needs
+ * it to run; a model found through search keeps its catalog entry in it.
+ */
 async function writeManifest(id, bytes, extra = {}) {
   const manifest = { id, bytes, installedAt: new Date().toISOString(), ...extra }
   await fsp.writeFile(path.join(modelDir(id), 'model.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8')
+}
+
+/** A model's model.json, or null. Synchronous: it's a few hundred bytes, read on demand. */
+function readManifest(id) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(modelDir(id), 'model.json'), 'utf8'))
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -180,11 +192,15 @@ async function acquireLock(dir) {
  * difference between a retry and starting over, but only if the resume is
  * provably at the right offset and the result is checked, both done here.
  *
- * @param {{modelId: string, url: string, bytes: number, repo: string, file: string, quant?: string}} plan
+ * `entry` is set for a model found through search: it has no line in the
+ * catalog, so its entry is saved beside the weights, from the first byte, so
+ * that Resume after a restart still knows what the file is.
+ *
+ * @param {{modelId: string, url: string, bytes: number, repo: string, file: string, quant?: string, entry?: object}} plan
  * @param {(p: object) => void} onProgress
  */
 async function install(plan, onProgress = () => {}) {
-  const { modelId, url, bytes } = plan
+  const { modelId, url, bytes, entry } = plan
   if (inFlight.has(modelId)) throw new Error(`${modelId} is already downloading`)
 
   const dir = modelDir(modelId)
@@ -207,6 +223,7 @@ async function install(plan, onProgress = () => {}) {
     }
 
     release = await acquireLock(dir)
+    if (entry) await writeManifest(modelId, bytes, { repo: plan.repo, file: plan.file, quant: plan.quant, sha256: 'pending', entry })
     const sha = await expectedSha256(plan)
 
     let from = (await fsp.stat(part).catch(() => null))?.size ?? 0
@@ -284,7 +301,13 @@ async function install(plan, onProgress = () => {}) {
 
     emit('installing', bytes)
     await fsp.rename(part, gguf)
-    await writeManifest(modelId, bytes, { repo: plan.repo, file: plan.file, quant: plan.quant, sha256: sha ?? 'unverified' })
+    await writeManifest(modelId, bytes, {
+      repo: plan.repo,
+      file: plan.file,
+      quant: plan.quant,
+      sha256: sha ?? 'unverified',
+      ...(entry && { entry }),
+    })
     emit('done', bytes)
     return { ok: true, modelId }
   } catch (err) {
@@ -322,6 +345,7 @@ const gb = (n) => Math.round((n / 1024 ** 3) * 10) / 10
 module.exports = {
   installed,
   isInstalled,
+  readManifest,
   install,
   cancel,
   remove,

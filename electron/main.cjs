@@ -4,7 +4,8 @@ const net = require('node:net')
 const path = require('node:path')
 const { ensureModel, switchModel, probe, stopServing } = require('./model.cjs')
 const { detect, describe } = require('./hardware.cjs')
-const { recommend, planFor } = require('./catalog.cjs')
+const { recommend, planFor, entryFor } = require('./catalog.cjs')
+const hub = require('./hub.cjs')
 const models = require('./install.cjs')
 const runtime = require('./runtime.cjs')
 const { startServer } = require('./serve.cjs')
@@ -204,11 +205,12 @@ function registerModelIpc() {
     const device = detect()
     const { models: ranked, recommended, reasons } = recommend(device, priority)
     const local = await models.installed()
-    // A downloaded quant that isn't its family's pick under this priority still
-    // has to appear, or "Downloaded" would silently hide it.
+    // A downloaded (or half-downloaded) quant that isn't its family's pick under
+    // this priority, or a model found through search, still has to appear, or
+    // "Downloaded" would silently hide it.
     const shown = new Set(ranked.map((m) => m.modelId))
     const extra = local
-      .filter((m) => m.complete && !shown.has(m.id))
+      .filter((m) => !shown.has(m.id))
       .map((m) => planFor(m.id, device))
       .filter(Boolean)
     const free = await models.freeBytes()
@@ -226,11 +228,22 @@ function registerModelIpc() {
     }
   })
 
+  ipcMain.handle('models:search', async (_e, query, priority = 'balanced') => {
+    try {
+      return { ok: true, results: await hub.search(query, detect(), priority) }
+    } catch (err) {
+      const offline = err.name === 'TimeoutError' || err.cause?.code === 'ENOTFOUND' || err.message === 'fetch failed'
+      return { ok: false, reason: offline ? 'Can’t reach Hugging Face. Check your connection.' : err.message }
+    }
+  })
+
   ipcMain.handle('models:install', async (_e, modelId) => {
     const plan = planFor(modelId, detect())
     if (!plan) return { ok: false, reason: `Unknown model: ${modelId}` }
+    // A model found through search takes its catalog entry along, into model.json.
+    const { entry } = entryFor(modelId)
     try {
-      return await models.install(plan, emit)
+      return await models.install(entry.source === 'hub' ? { ...plan, entry } : plan, emit)
     } catch (err) {
       emit({ id: modelId, phase: 'error', message: err.message })
       return { ok: false, reason: err.message }

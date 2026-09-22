@@ -37,8 +37,18 @@ export type ModelPlan = {
   blurb: string
   formatRisk: string | null
   fits: boolean
+  /** Why it doesn't fit: too little memory, or a context window under 16k. */
+  limit: 'memory' | 'context' | null
+  maxCtx: number
   score: number
+  /** 'catalog' is the curated list; 'hub' was found through Hugging Face search. */
+  source: 'catalog' | 'hub'
+  /** Who published the GGUF: "unsloth", "bartowski", "ggml-org"… */
+  author: string
+  downloads: number | null
 }
+
+export type SearchResult = { ok: true; results: ModelPlan[] } | { ok: false; reason: string }
 
 export type InstalledModel = {
   id: string
@@ -76,6 +86,7 @@ type Bridge = {
   library: { load(): unknown; save(value: unknown): void }
   device(): Promise<Device>
   catalog(priority?: Priority): Promise<CatalogSnapshot>
+  search(query: string, priority?: Priority): Promise<SearchResult>
   install(modelId: string): Promise<{ ok: boolean; reason?: string }>
   cancelInstall(modelId: string): Promise<{ ok: boolean }>
   remove(modelId: string): Promise<{ ok: boolean; reason?: string }>
@@ -156,6 +167,36 @@ export function startSnapshotSync() {
       void loadSnapshot(true)
     }
   })
+}
+
+// --- Hugging Face search ---------------------------------------------------
+// Answers are kept for the session, so backspacing over a query or reopening
+// the browser shows its results at once instead of asking the network again.
+
+const searches = new Map<string, SearchResult>()
+
+export const searchKey = (query: string, p: Priority) => `${p}:${query.trim().toLowerCase().replace(/\s+/g, ' ')}`
+
+export function cachedSearch(query: string, p: Priority) {
+  return searches.get(searchKey(query, p)) ?? null
+}
+
+export async function searchHub(query: string, p: Priority): Promise<SearchResult> {
+  const api = bridge()
+  if (!api) return { ok: false, reason: 'Open the Mac app to search models.' }
+  const res = await api.search(query, p)
+  if (res.ok) searches.set(searchKey(query, p), res)
+  return res
+}
+
+/**
+ * Every word must appear somewhere in the model, in any order, so
+ * "gemma 1b" finds "gemma-3-1b-it" and "coder 7b" finds "Qwen2.5-Coder 7B".
+ */
+export function matchesQuery(m: ModelPlan, query: string) {
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const haystack = `${m.label} ${m.repo} ${m.quant} ${m.tags.join(' ')}`.toLowerCase()
+  return words.every((w) => haystack.includes(w))
 }
 
 /** One decimal below 100 GB, so "16.5 GB budget" and "16.5 GB" never disagree. */

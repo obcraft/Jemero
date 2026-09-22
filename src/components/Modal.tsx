@@ -15,7 +15,9 @@ export default function Modal({
   title,
   subtitle,
   tabs,
+  toolbar,
   wide,
+  tall,
   children,
 }: {
   open: boolean
@@ -23,7 +25,11 @@ export default function Modal({
   title: string
   subtitle?: string
   tabs?: ReactNode
+  /** Controls pinned under the title while the body scrolls (search, filters). */
+  toolbar?: ReactNode
   wide?: boolean
+  /** A fixed height, so a list that grows and shrinks as you type doesn't make the dialog jump. */
+  tall?: boolean
   children: ReactNode
 }) {
   const [mounted, setMounted] = useState(open)
@@ -81,7 +87,7 @@ export default function Modal({
       }}
     >
       <div
-        className={`sheet${wide ? ' wide' : ''}${shown ? ' shown' : ''}`}
+        className={`sheet${wide ? ' wide' : ''}${tall ? ' tall' : ''}${toolbar ? ' has-toolbar' : ''}${shown ? ' shown' : ''}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -101,6 +107,7 @@ export default function Modal({
           </button>
         </header>
         {tabs && <div className="sheet-tabs">{tabs}</div>}
+        {toolbar && <div className="sheet-toolbar">{toolbar}</div>}
         <div className="sheet-body">{children}</div>
       </div>
     </div>

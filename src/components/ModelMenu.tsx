@@ -125,9 +125,7 @@ export default function ModelMenu({
         <span className="menu-check" />
         <span className="menu-text">
           <span className="menu-title">Browse all models…</span>
-          <span className="menu-sub">
-            {snap ? `${snap.models.filter((m) => m.fits).length} of ${snap.models.length} run on this Mac` : 'Matched to your hardware'}
-          </span>
+          <span className="menu-sub plain">Or search any model on Hugging Face</span>
         </span>
       </button>
     </div>
