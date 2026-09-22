@@ -35,12 +35,8 @@ export default function QuantizeDialog() {
 
   return (
     <Modal open={open} onClose={close} title="Quantization" subtitle="Lighter, faster models">
-      <p className="note">
-        Quantized models store their weights in 4 bits instead of 8. They need about half the memory and write roughly twice
-        as fast, for a small drop in quality. It applies to the models Jemero recommends and downloads, and to the model it
-        starts next time, if you already have a 4-bit copy.
-      </p>
-      <Row label="Use quantized models" hint={unsupported ? 'Not supported on this Mac.' : 'You can change this later in Settings → Generation.'}>
+      <p className="note">4-bit models use about half the memory and run about twice as fast.</p>
+      <Row label="Use quantized models" hint={unsupported ? 'Not supported on this Mac.' : 'Change it later in Settings.'}>
         <Toggle
           value={s.quantize && !unsupported}
           disabled={support === null || unsupported}

@@ -18,7 +18,7 @@ import {
   type Mode,
   type Version,
 } from './lib/library'
-import { buildRequest, buildSystem, portRequest, refineRequest, repairRequest, reviewRequest } from './lib/systemPrompt'
+import { KIND_LABEL, buildRequest, buildSystem, portRequest, refineRequest, repairRequest, reviewRequest } from './lib/systemPrompt'
 import { modelLabel, setPriority, setQuantization, startSnapshotSync } from './lib/models'
 import {
   applyAppearance,
@@ -245,6 +245,35 @@ export default function App() {
       }),
     [],
   )
+
+  // Startup: nothing is usable until the model answers and the UI kits are
+  // loaded. The shell has already started the server before opening this page,
+  // so this is usually one round trip; it keeps trying for a minute in case the
+  // server is still coming up. With no model downloaded (the shell opens
+  // #models) there is nothing to wait for but the kits.
+  const [booted, setBooted] = useState(false)
+  const [bootStep, setBootStep] = useState('Starting…')
+  useEffect(() => {
+    let cancelled = false
+    const boot = async () => {
+      const needsServer = window.location.hash !== '#models'
+      const started = Date.now()
+      setBootStep('Loading the model…')
+      while (!cancelled && needsServer && Date.now() - started < 60_000) {
+        const result = await ping()
+        if (result.ok) break
+        await new Promise((r) => setTimeout(r, 500))
+      }
+      if (cancelled) return
+      setBootStep('Loading components…')
+      await loadManifest().catch(() => undefined)
+      if (!cancelled) setBooted(true)
+    }
+    void boot()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Watch the built-in model server.
   useEffect(() => {
@@ -621,6 +650,18 @@ export default function App() {
       </p>
     )
   ) : null
+
+  if (!booted) {
+    return (
+      <div className="boot" role="status" aria-live="polite">
+        <span className="logo">⬢</span>
+        <strong>Jemero</strong>
+        <p>
+          <span className="spinner-dot" /> {bootStep}
+        </p>
+      </div>
+    )
+  }
 
   const composerEl = (
     <div className="composer">

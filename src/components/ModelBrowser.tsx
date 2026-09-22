@@ -298,8 +298,7 @@ export default function ModelBrowser({
                 </select></label>
                 <span>{list.length + hubRows.length} models · {list.filter((m) => m.fits).length + hubRows.filter((m) => m.fits).length} fit this Mac</span>
               </div>
-              <p className="list-foot">Download public GGUF language models from Hugging Face. Models that cannot run here stay disabled.</p>
-              <div className="model-list">
+                  <div className="model-list">
                 {list.map(row)}
 
                 {!list.length && !searching && (

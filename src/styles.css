@@ -122,6 +122,24 @@ textarea:focus-visible,
    stay mounted, only hidden, so the canvas and a running generation carry on. */
 .body.on-page { grid-template-columns: 52px 1fr; }
 .body.on-page > .side, .body.on-page > .workspace { display: none; }
+
+/* Start screen: nothing open, so the middle is just the question and the composer. */
+.body.on-start { grid-template-columns: 52px minmax(240px, 20%) 1fr; }
+.body.on-start > .workspace { display: none; }
+.body.on-start > .start { grid-column: 3; grid-row: 1; }
+.body.on-start > .side { grid-column: 2; grid-row: 1; }
+.start {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  padding: 24px; min-width: 0; background: var(--bg);
+}
+.start h1 { margin: 0 0 6px; font-size: 24px; font-weight: 600; letter-spacing: -0.01em; }
+.start .composer {
+  width: min(720px, 100%); border: 1px solid var(--line); border-radius: 14px;
+}
+.start .kind-switch { margin: 0; }
+.start .loading-note { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12.5px; margin: 0; }
+.start .loading-note .spinner-dot { width: 7px; height: 7px; }
+.start .warn { color: var(--warn); font-size: 12.5px; margin: 0; }
 .page { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); }
 .page-head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -130,7 +148,7 @@ textarea:focus-visible,
 .page-tabs { padding-left: 18px; background: var(--panel); }
 .page-toolbar { padding: 0 24px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .page-body { flex: 1; overflow-y: auto; padding: 20px 24px 32px; }
-.page-inner { max-width: 720px; margin: 0 auto; }
+.page-inner { width: 100%; }
 
 /* --- icon rail, far left -------------------------------------------------- */
 .rail {
@@ -479,6 +497,16 @@ textarea:focus { outline: none; border-color: var(--accent); }
 .console-line.info { color: var(--accent-text); }
 
 .empty { height: 100%; display: grid; place-content: center; justify-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+/* Startup screen: shown until the model and the kits are ready. */
+.boot {
+  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  background: var(--bg); color: var(--text);
+}
+.boot .logo { color: var(--accent); font-size: 34px; line-height: 1; }
+.boot strong { font-size: 18px; }
+.boot p { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; color: var(--muted); font-size: 12.5px; }
+.boot .spinner-dot { width: 7px; height: 7px; }
+
 .spinner-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
 

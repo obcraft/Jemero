@@ -66,7 +66,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
         <div className="page-inner tab-fade" key={tab}>
           {tab === 'general' && (
             <>
-              <Row label="Appearance" hint="Follows macOS unless you pick one.">
+              <Row label="Appearance" hint="Follows macOS by default.">
                 <Segmented<Theme>
                   value={s.theme}
                   options={[
@@ -78,29 +78,29 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                 />
               </Row>
 
-              <Row label="Animations" hint="Panel and tab transitions. Off is instant.">
+              <Row label="Animations" hint="Panel and tab transitions.">
                 <Toggle value={s.animations} onChange={(animations) => setSettings({ animations })} />
               </Row>
 
               <h3 className="group-heading">While it builds</h3>
 
-              <Row label="Thinking" hint="Let the model reason first. Off is much faster. R1-style models always think.">
+              <Row label="Thinking" hint="Reason before answering. Slower.">
                 <Toggle value={s.thinking} onChange={(thinking) => setSettings({ thinking })} />
               </Row>
 
-              <Row label="Show reasoning" hint="Shows the thinking above the answer while it streams.">
+              <Row label="Show reasoning" hint="Show the thinking while it streams.">
                 <Toggle value={s.showReasoning} onChange={(showReasoning) => setSettings({ showReasoning })} />
               </Row>
 
-              <Row label="Plan before coding" hint="A short plan first: anatomy, states, props, behaviour. Better components, a few seconds slower.">
+              <Row label="Plan before coding" hint="Plan first. Better results, a bit slower.">
                 <Toggle value={s.planFirst} onChange={(planFirst) => setSettings({ planFirst })} />
               </Row>
 
-              <Row label="Watch the code being written" hint="Shows the code tab while the model writes, then the canvas.">
+              <Row label="Watch the code being written" hint="Show the code tab while it writes.">
                 <Toggle value={s.autoSwitchTabs} onChange={(autoSwitchTabs) => setSettings({ autoSwitchTabs })} />
               </Row>
 
-              <Row label="Repair imports" hint="Adds forgotten imports, maps unknown icon names to real ones, rewrites deep imports.">
+              <Row label="Repair imports" hint="Fix missing imports and icon names.">
                 <Toggle value={s.autoFixImports} onChange={(autoFixImports) => setSettings({ autoFixImports })} />
               </Row>
 
@@ -112,7 +112,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
           {tab === 'model' && (
             <>
-              <Row label="Recommend models for" hint="Changes which model is marked Best.">
+              <Row label="Recommend models for" hint="Which model is marked Best.">
                 <Segmented<Priority>
                   value={s.modelPriority}
                   options={[
@@ -124,7 +124,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                 />
               </Row>
 
-              <Row label="Quantization" hint="Prefer 4-bit model files: lighter and faster, a little less precise. Applies to picks and the next launch.">
+              <Row label="Quantization" hint="Prefer 4-bit models: lighter and faster.">
                 <Toggle value={s.quantize} onChange={(quantize) => setSettings({ quantize })} />
               </Row>
 
@@ -147,7 +147,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
               <Row
                 label="Temperature"
-                hint="Low keeps the output format intact. Above ~0.5 it starts improvising past the spec."
+                hint="Low keeps output reliable."
                 value={s.temperature.toFixed(2)}
               >
                 <input
@@ -163,7 +163,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
               <Row
                 label="Top-p"
-                hint="Nucleus sampling. Leave at 0.95 unless you're chasing a specific failure."
+                hint="Leave at 0.95."
                 value={s.topP.toFixed(2)}
               >
                 <input
@@ -177,10 +177,6 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                 />
               </Row>
 
-              <p className="note">
-                Context size isn’t here on purpose: it’s fixed when the model server starts, and the
-                catalog picks the largest window that fits your Mac. Change the model to change it.
-              </p>
             </>
           )}
 
@@ -188,8 +184,8 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
             <>
               <p className="note">
                 {usingDefaultPrompt
-                  ? 'Using the built-in prompt: what to build (one component, a Preview, optional variants) and the quality bar. The output format, the kit and the size brief are added after it either way.'
-                  : 'Custom prompt. It replaces the built-in rules; the output format, the kit and the size brief are still added after it.'}
+                  ? 'Using the built-in prompt.'
+                  : 'Using your custom prompt.'}
               </p>
 
               <textarea
@@ -236,7 +232,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                   </button>
                 </div>
               </div>
-              <p className="note">Takes effect on your next prompt; the current conversation keeps the prompt it started with.</p>
+              <p className="note">Applies to your next prompt.</p>
             </>
           )}
         </div>
