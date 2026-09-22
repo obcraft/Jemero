@@ -108,6 +108,8 @@ export type PackBridge = {
   cancel(id: string): Promise<{ ok: boolean }>
   remove(id: string): Promise<PackResult>
   onProgress(fn: (p: PackProgress) => void): () => void
+  /** A pack was activated or removed. */
+  onChanged(fn: () => void): () => void
 }
 
 // --- installed packs, as the local server publishes them (electron/pack-routes.cjs) ---

@@ -13,6 +13,11 @@ export type StageCode = { entry: string; modules: StageModule[] }
 type Props = {
   code: StageCode | null
   kit: KitId
+  /**
+   * Installed packs for the import map. The map is fixed once the canvas has
+   * loaded a module, so a new key (a pack activated or removed) reloads it.
+   */
+  packs: { key: string; imports: Record<string, string>; styles: Record<string, string[]> }
   layout: 'center' | 'fill'
   theme: 'light' | 'dark'
   bg: CanvasBg
@@ -35,7 +40,7 @@ const GUTTER = 28
  * Device widths are real: the iframe is laid out at 375/768/1280px (media
  * queries respond to that) and scaled down to fit the pane when it's narrower.
  */
-function Stage({ code, kit, layout, theme, bg, width, variant, resetKey, onEvent, children }: Props) {
+function Stage({ code, kit, packs, layout, theme, bg, width, variant, resetKey, onEvent, children }: Props) {
   const frame = useRef<HTMLIFrameElement>(null)
   const pane = useRef<HTMLDivElement>(null)
   const [ready, setReady] = useState(false)
@@ -46,8 +51,8 @@ function Stage({ code, kit, layout, theme, bg, width, variant, resetKey, onEvent
 
   const post = (msg: object) => frame.current?.contentWindow?.postMessage({ __jemero: 'host', ...msg }, '*')
 
-  // A new kit is a new iframe, which has to announce itself again.
-  useLayoutEffect(() => setReady(false), [kit])
+  // A new kit or pack set is a new iframe, which has to announce itself again.
+  useLayoutEffect(() => setReady(false), [kit, packs.key])
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -99,10 +104,10 @@ function Stage({ code, kit, layout, theme, bg, width, variant, resetKey, onEvent
     <div className={`stage${target ? ' device' : ''}`} ref={pane}>
       <div className="stage-device" style={target ? { width: target * scale, height } : undefined}>
         <iframe
-          key={kit}
+          key={`${kit}|${packs.key}`}
           ref={frame}
           className="stage-frame"
-          src="/kits/stage.html"
+          src={`/kits/stage.html#packs=${encodeURIComponent(JSON.stringify({ imports: packs.imports, styles: packs.styles }))}`}
           sandbox="allow-scripts allow-forms"
           title="Canvas"
           style={target ? { width: target, height: height / scale, transform: `scale(${scale})` } : undefined}

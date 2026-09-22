@@ -48,6 +48,8 @@ export type Settings = {
   quantize: boolean
   /** Ask about quantization when the app starts, until "Don't show again". */
   quantizePrompt: boolean
+  /** First-run setup (model and packs) was completed or skipped. */
+  setupDone: boolean
   /** The kit new components are built with. */
   kit: KitId
   /** Canvas: light or dark, or follow the app. */
@@ -72,6 +74,7 @@ export const DEFAULTS: Settings = {
   modelPriority: 'balanced',
   quantize: false,
   quantizePrompt: true,
+  setupDone: false,
   kit: 'shadcn',
   canvasTheme: 'app',
   canvasBg: 'dots',

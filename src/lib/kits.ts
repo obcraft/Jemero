@@ -77,12 +77,18 @@ export const KITS: Kit[] = [
     autoImport: (m) => [...uiModules(m), '@/lib/utils'],
     prompt: (m) => `KIT: shadcn/ui (Radix + Tailwind CSS v4). Every component below is installed. Import from these paths:
 ${uiModules(m)
-  .map((s) => `  ${s}: ${m.exports[s].filter((n) => n !== 'default' && !/Variants$/.test(n)).join(', ')}`)
+  // A few names per module, not all of them: a full list reads like a
+  // template, and small models copy it whole into every file.
+  .map((s) => {
+    const names = m.exports[s].filter((n) => n !== 'default' && !/Variants$/.test(n))
+    return `  ${s}: ${names.slice(0, 6).join(', ')}${names.length > 6 ? ', …' : ''}`
+  })
   .join('\n')}
   @/lib/utils: cn
 ${builtIns(m)}
 
 USAGE THAT MATTERS:
+- Import only what the file uses, once each.
 - Searchable list or combobox: Popover + Command. CommandInput filters the CommandItems live by their value.
 - <SelectItem value="…"> needs a non-empty value.
 - <Slider value={[n]} onValueChange={([v]) => setN(v)} />, <Switch checked={on} onCheckedChange={setOn} />

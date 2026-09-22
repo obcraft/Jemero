@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld('jemero', {
   remove: (modelId) => invoke('models:remove', modelId),
   /** Restart the local server on a different model. */
   activate: (modelId) => invoke('models:activate', modelId),
+  /** Offline readiness: runtime, model and installed packs (electron/main.cjs). */
+  offlineCheck: () => invoke('offline:check'),
   /** Packs: the signed catalog, what's installed, and installing with progress. */
   packs: {
     list: () => invoke('packs:list'),

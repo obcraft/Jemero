@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { listModels, ping, streamChat } from './lib/llm'
 import { parseArtifacts, type ParsedFile } from './lib/parser'
 import { compile, isScript, pickEntry, type Compiled } from './lib/compile'
-import { kitById, loadManifest, type KitId, type Manifest } from './lib/kits'
+import { kitById, withPacks, loadManifest, type KitId, type Manifest } from './lib/kits'
 import {
   addTurn,
   addVersion,
@@ -19,7 +19,7 @@ import {
   type Version,
 } from './lib/library'
 import { KIND_LABEL, buildRequest, buildSystem, portRequest, refineRequest, repairRequest, reviewRequest } from './lib/systemPrompt'
-import { modelLabel, setPriority, setQuantization, startSnapshotSync } from './lib/models'
+import { bridge, modelLabel, setPriority, setQuantization, startSnapshotSync } from './lib/models'
 import {
   applyAppearance,
   effectivePrompt,
@@ -36,21 +36,37 @@ import ModelMenu from './components/ModelMenu'
 import SettingsPage from './components/SettingsPage'
 import QuantizeDialog from './components/QuantizeDialog'
 import ResourcesPage from './components/ResourcesPage'
+import {
+  installedKey,
+  installedPacks,
+  isLocalPack,
+  loadInstalledPacks,
+  lockForFiles,
+  watchInstalledPacks,
+  type InstalledPack,
+  type LocalPack,
+} from './lib/packs'
+import { selectPacks, type PackCandidate } from './lib/packSelect'
 import Library from './components/Library'
 import Conversation, { type Draft } from './components/Conversation'
 import Stage, { type StageCode, type StageEvent } from './components/Stage'
 import CodeView from './components/CodeView'
 import ConsoleView, { type ConsoleEntry, type ConsoleLevel } from './components/ConsoleView'
 
-type Phase = 'idle' | 'thinking' | 'planning' | 'writing' | 'reviewing'
+type Phase = 'idle' | 'choosing' | 'installing' | 'thinking' | 'planning' | 'writing' | 'reviewing'
 type Tab = 'canvas' | 'code' | 'console'
 
 const PHASE_LABEL: Record<Exclude<Phase, 'idle'>, string> = {
+  choosing: 'Choosing libraries…',
+  installing: 'Installing a pack…',
   thinking: 'Thinking…',
   planning: 'Planning…',
   writing: 'Writing the code…',
   reviewing: 'Reviewing…',
 }
+
+const formatBytes = (b: number) =>
+  b >= 1024 ** 2 ? `${(b / 1024 ** 2).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`
 
 /** Re-parsing the whole stream on every token is O(n²); 70 ms still feels live. */
 const PARSE_INTERVAL_MS = 70
@@ -64,6 +80,24 @@ const MAX_CONSOLE = 500
  * a row, so seeing it means stop now rather than stream 4k tokens of noise.
  */
 const DEGENERATE = /([^\s])\1{47,}$/
+
+/**
+ * The other way small models break: the same block of lines over and over
+ * (Qwen2.5-Coder 1.5B repeating its whole import list). True when the last
+ * block of 3 to 40 varied lines appears three times in a row at the end.
+ */
+export function repeatingBlock(text: string): boolean {
+  const lines = text.slice(-12000).split('\n').map((l) => l.trim())
+  if (lines.length > 1 && lines.at(-1) !== '') lines.pop() // the line still being written
+  for (let k = 2; k <= 40 && k * 3 <= lines.length; k++) {
+    const block = lines.slice(-k)
+    // Real code repeats short lines (a run of </div>); a loop repeats a varied block.
+    if (new Set(block.filter((l) => l.length > 3)).size < 3) continue
+    const same = (from: number) => block.every((l, i) => lines[lines.length - from * k + i] === l)
+    if (same(2) && same(3)) return true
+  }
+  return false
+}
 
 const TABS: Tab[] = ['canvas', 'code', 'console']
 
@@ -186,6 +220,14 @@ export default function App() {
   const [manifest, setManifest] = useState<Manifest | null>(null)
   const [manifestError, setManifestError] = useState<string | null>(null)
 
+  // --- packs ---------------------------------------------------------------
+  /** Active, verified packs as the local server publishes them. */
+  const [installed, setInstalled] = useState(installedPacks)
+  /** The catalog's local packs, for naming the ones an import needs but this Mac lacks. */
+  const [packCatalog, setPackCatalog] = useState<LocalPack[]>([])
+  /** "This needs KaTeX. Install?", waiting for the user during a generation. */
+  const [packAsk, setPackAsk] = useState<{ packs: LocalPack[]; resolve: (yes: boolean) => void } | null>(null)
+
   // --- library & generation ---------------------------------------------
   const [selectedId, setSelectedId] = useState<string | null>(() => getLibrary().items[0]?.id ?? null)
   /** Version on the canvas per item (1-based); missing means the latest. */
@@ -231,6 +273,25 @@ export default function App() {
   // Keep the model snapshot fresh (and ranked the user's way) for the header
   // menu and the browser.
   useEffect(() => startSnapshotSync(), [])
+
+  // Installed packs: reloaded whenever one is activated or removed, which
+  // also gives the canvas a new import map (its key changes).
+  useEffect(() => {
+    const refreshCatalog = () =>
+      void bridge()
+        ?.packs.list()
+        .then((l) => setPackCatalog(l.packs.filter(isLocalPack)))
+    const stopWatch = watchInstalledPacks(() => setInstalled(installedPacks()))
+    const stopChanged = bridge()?.packs.onChanged(() => {
+      void loadInstalledPacks()
+      refreshCatalog()
+    })
+    refreshCatalog()
+    return () => {
+      stopWatch()
+      stopChanged?.()
+    }
+  }, [])
   useEffect(() => setPriority(settings.modelPriority), [settings.modelPriority])
   useEffect(() => void setQuantization(settings.quantize), [settings.quantize])
 
@@ -267,7 +328,7 @@ export default function App() {
       }
       if (cancelled) return
       setBootStep('Loading components…')
-      await loadManifest().catch(() => undefined)
+      await Promise.all([loadManifest().catch(() => undefined), loadInstalledPacks()])
       if (!cancelled) setBooted(true)
     }
     void boot()
@@ -340,12 +401,25 @@ export default function App() {
     return () => clearTimeout(id)
   }, [source])
 
+  // What the compiler accepts: the kit plus every installed, verified pack.
+  // Imports of catalog packs that aren't installed are refused by name, so
+  // they never reach the canvas.
+  const packManifest = useMemo(() => (manifest ? withPacks(manifest, installed) : null), [manifest, installed])
+  const missingPacks = useMemo(() => {
+    const out: Record<string, string> = {}
+    for (const p of packCatalog) if (!installed.packs[p.id]) for (const spec of Object.keys(p.imports)) out[spec] = p.name
+    return out
+  }, [packCatalog, installed])
+
   const compiled = useMemo<Compiled | null>(
     () =>
-      compileInput && manifest
-        ? compile(compileInput.files, compileInput.entry, compileInput.kit, manifest, { repair: settings.autoFixImports })
+      compileInput && packManifest
+        ? compile(compileInput.files, compileInput.entry, compileInput.kit, packManifest, {
+            repair: settings.autoFixImports,
+            missingPacks,
+          })
         : null,
-    [compileInput, manifest, settings.autoFixImports],
+    [compileInput, packManifest, missingPacks, settings.autoFixImports],
   )
 
   // The canvas keeps showing the last version that compiled while the current
@@ -394,6 +468,127 @@ export default function App() {
 
   // --- generation ---------------------------------------------------------
 
+  /** Ask whether to download packs; resolves false on "not now" or when the run is stopped. */
+  const askInstall = useCallback(
+    (packs: LocalPack[], signal: AbortSignal) =>
+      new Promise<boolean>((resolve) => {
+        const done = (yes: boolean) => {
+          setPackAsk(null)
+          resolve(yes)
+        }
+        signal.addEventListener('abort', () => done(false), { once: true })
+        setPackAsk({ packs, resolve: done })
+      }),
+    [],
+  )
+
+  /**
+   * Pass one of a generation: pick packs, install the missing ones (after
+   * asking), fall back to installed alternatives when that fails or is
+   * declined. Returns installed packs only: the model is never told about an
+   * import the canvas can't load yet.
+   */
+  const resolvePacks = useCallback(
+    async ({
+      mode,
+      kind,
+      text,
+      base,
+      itemId,
+      signal,
+    }: {
+      mode: Mode
+      kind: Kind
+      text: string
+      base: Version | null
+      itemId: string
+      signal: AbortSignal
+    }) => {
+      let inst = await loadInstalledPacks()
+      // Packs the current version already uses stay available to it.
+      const keep = base ? Object.keys(lockForFiles(base.files, inst).packs) : []
+      const pick = (ids: string[]) =>
+        [...new Set([...keep, ...ids])].filter((id) => inst.packs[id]).map((id) => ({ id, pack: inst.packs[id] }))
+      if (mode !== 'build' && mode !== 'refine') return pick([])
+      const api = bridge()
+      if (!api || !model) return pick([])
+
+      setPhase('choosing')
+      // Online means the pack server answered this request, not that Wi-Fi is on.
+      const list = await api.packs.list()
+      signal.throwIfAborted()
+      const online = list.ok && !list.fromCache && !!list.source
+      const catalog = list.packs.filter(isLocalPack)
+      const installedOnly = (): PackCandidate[] =>
+        Object.entries(inst.packs).map(([id, p]) => ({
+          id,
+          name: p.name,
+          description: p.description,
+          installed: true,
+          download: 0,
+          dependencies: p.dependencies,
+        }))
+      const candidates: PackCandidate[] = online
+        ? catalog.map((p) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description ?? '',
+            installed: inst.packs[p.id]?.version === p.version,
+            download: inst.packs[p.id] ? 0 : p.size.download,
+            dependencies: p.dependencies,
+          }))
+        : installedOnly()
+      let chosen = await selectPacks({ model, kind, request: text, candidates, signal })
+
+      const missing = chosen.filter((id) => !inst.packs[id])
+      if (!missing.length) return pick(chosen)
+
+      // With dependencies, so the prompt shows the whole download.
+      const byId = new Map(catalog.map((p) => [p.id, p]))
+      const needed: LocalPack[] = []
+      const add = (id: string) => {
+        const p = byId.get(id)
+        if (!p || inst.packs[id] || needed.includes(p)) return
+        p.dependencies.forEach(add)
+        needed.push(p)
+      }
+      missing.forEach(add)
+
+      let failure = ''
+      if (await askInstall(needed, signal)) {
+        setPhase('installing')
+        for (const id of missing) {
+          const res = await api.packs.install(id)
+          signal.throwIfAborted()
+          if (!res.ok) {
+            failure = res.reason ?? 'The download failed.'
+            break
+          }
+        }
+        inst = await loadInstalledPacks()
+      } else {
+        signal.throwIfAborted()
+        failure = 'declined'
+      }
+      if (missing.every((id) => inst.packs[id])) return pick(chosen)
+
+      // Not installed: choose again among what is, and say so.
+      const names = needed.map((p) => p.name).join(', ')
+      addTurn(itemId, {
+        role: 'assistant',
+        mode,
+        text:
+          failure === 'declined'
+            ? `Building without ${names}, using what's installed.`
+            : `Couldn't install ${names}: ${failure} Building with what's installed instead.`,
+      })
+      setPhase('choosing')
+      chosen = await selectPacks({ model, kind, request: text, candidates: installedOnly(), signal })
+      return pick(chosen)
+    },
+    [model, askInstall],
+  )
+
   const generate = useCallback(
     async (requested: Mode, text: string, portKit?: KitId) => {
       if (!model || !manifest || abort.current) return
@@ -410,14 +605,6 @@ export default function App() {
       if (!base) mode = 'build'
 
       const kit: KitId = mode === 'port' && portKit ? portKit : (base?.kit ?? NEW_KIT)
-      const system = buildSystem({
-        base: effectivePrompt(settings),
-        kit,
-        kind: target.kind,
-        manifest,
-        plan: settings.planFirst,
-        review: mode === 'review',
-      })
       const request =
         mode === 'build'
           ? buildRequest(target.kind, text)
@@ -447,7 +634,34 @@ export default function App() {
       setDraft({ itemId, mode, prose: '', plan: '', review: [] })
       setDraftFiles(null)
       setDraftDone(null)
-      if (settings.autoSwitchTabs && mode !== 'review') setTab('code')
+      // Watch a new component being written; changes to one stay on the canvas.
+      if (mode === 'build' || (settings.autoSwitchTabs && mode !== 'review')) setTab('code')
+
+      // Pass one: which packs, installed before a line of code is written.
+      let chosenPacks: { id: string; pack: InstalledPack }[] = []
+      try {
+        chosenPacks = await resolvePacks({ mode, kind: target.kind, text, base, itemId, signal: controller.signal })
+      } catch (e) {
+        if (controller.signal.aborted) {
+          abort.current = null
+          running.current = null
+          setPhase('idle')
+          setDraft(null)
+          return
+        }
+        // Choosing is an optimisation, never a blocker: build with the kit alone.
+        console.warn('pack selection failed', e)
+      }
+      const system = buildSystem({
+        base: effectivePrompt(settings),
+        kit,
+        kind: target.kind,
+        manifest,
+        plan: settings.planFirst,
+        review: mode === 'review',
+        packs: chosenPacks,
+      })
+      if (mode !== 'review') setPhase('thinking')
 
       let raw = ''
       let lastParse = 0
@@ -487,12 +701,15 @@ export default function App() {
           onThought: settings.showReasoning ? (t) => setThought((prev) => (prev + t).slice(-4000)) : undefined,
           onToken: (token) => {
             raw += token
-            if (!broken && DEGENERATE.test(raw.slice(-64))) {
+            if (!broken && (DEGENERATE.test(raw.slice(-64)) || (token.includes('\n') && repeatingBlock(raw)))) {
               // Record first, then abort: a plain abort is the user pressing
               // Stop and stays quiet, which would hide this.
               broken = new Error(
-                `The model started repeating “${raw.slice(-1)}” endlessly. Its output is broken, not slow. ` +
-                  'Switch to another model from the header; if this one keeps doing it, delete and re-download it.',
+                DEGENERATE.test(raw.slice(-64))
+                  ? `The model started repeating “${raw.slice(-1)}” endlessly. Its output is broken, not slow. ` +
+                      'Switch to another model from the header; if this one keeps doing it, delete and re-download it.'
+                  : 'The model got stuck writing the same lines over and over, so it was stopped. Try again, ' +
+                      'or use a larger model: small ones loop more often.',
               )
               controller.abort()
               return
@@ -517,7 +734,7 @@ export default function App() {
           throw new Error(
             p.files.length
               ? 'The model ran out of room in the middle of the file. Raise Answer length in Settings, or ask for something smaller.'
-              : 'The model answered without a <file> block. Try again, or pick a stronger model.',
+              : `The model answered without a <file> block. Try again, or pick a stronger model.${raw.trim() ? ` It wrote: “${raw.trim().slice(0, 160)}”` : ' Its answer was empty.'}`,
           )
         }
         const merged = mergeOutput(base, written)
@@ -526,6 +743,8 @@ export default function App() {
           files: merged.files,
           entry: merged.entry,
           kit,
+          // The exact pack versions this code renders with.
+          packs: lockForFiles(merged.files, installedPacks()),
           plan: p.plan,
           prompt: said,
           mode,
@@ -534,7 +753,7 @@ export default function App() {
         updateItem(itemId, (it) => ({ ...it, name: displayName(merged.entry) }))
         addTurn(itemId, { role: 'assistant', mode, text: p.prose, plan: p.plan || undefined, version: number })
         setViewed((v) => ({ ...v, [itemId]: number }))
-        if (settings.autoSwitchTabs) setTab('canvas')
+        if (mode === 'build' || settings.autoSwitchTabs) setTab('canvas')
       } catch (e) {
         if (controller.signal.aborted && !broken) return
         addTurn(itemId, { role: 'assistant', mode, text: '', error: (broken ?? (e as Error)).message })
@@ -549,13 +768,14 @@ export default function App() {
         }
       }
     },
-    [model, manifest, selectedId, viewed, newKind, settings],
+    [model, manifest, selectedId, viewed, newKind, settings, resolvePacks],
   )
 
   const cancel = useCallback(() => {
     const controller = abort.current
     const run = running.current
     if (!controller) return
+    console.info('[generate] stopped by the user', new Error().stack?.split('\n').slice(2, 5).join(' | '))
     controller.abort()
     if (run) addTurn(run.itemId, { role: 'assistant', mode: run.mode, text: 'Stopped.' })
   }, [])
@@ -630,6 +850,10 @@ export default function App() {
         ? { title: ERROR_TITLE[stageError.kind] ?? 'Error', message: stageError.detail, dismissable: true }
         : null
 
+  const stagePacks = useMemo(
+    () => ({ key: installedKey(installed), imports: installed.imports, styles: installed.styles }),
+    [installed],
+  )
   const currentKit = draftDone?.kit ?? version?.kit ?? NEW_KIT
   const canvasKit = stage?.kit ?? currentKit
   const canvasTheme = settings.canvasTheme === 'app' ? appTheme : settings.canvasTheme
@@ -666,6 +890,25 @@ export default function App() {
 
   const composerEl = (
     <div className="composer">
+      {packAsk && (
+        <div className="pack-ask" role="alertdialog" aria-label="Install packs">
+          <div className="pack-ask-text">
+            <strong>Needs {packAsk.packs.map((p) => p.name).join(', ')}</strong>
+            <span>
+              {formatBytes(packAsk.packs.reduce((n, p) => n + p.size.download, 0))} download
+              {packAsk.packs.length > 1 ? ` · ${packAsk.packs.length} packs` : ''}
+              {packAsk.packs.some((p) => p.dependencies.length) &&
+                ` · with ${packAsk.packs.flatMap((p) => p.dependencies).join(', ')}`}
+            </span>
+          </div>
+          <button className="btn ghost small" onClick={() => packAsk.resolve(false)}>
+            Not now
+          </button>
+          <button className="btn small" onClick={() => packAsk.resolve(true)}>
+            Install
+          </button>
+        </div>
+      )}
       {item && version && !busy && (
         <div className="chips">
           {REFINE_CHIPS[item.kind].map((c) => (
@@ -989,6 +1232,7 @@ export default function App() {
               <Stage
                 code={stage?.code ?? null}
                 kit={canvasKit}
+                packs={stagePacks}
                 layout={layout}
                 theme={canvasTheme}
                 bg={settings.canvasBg}

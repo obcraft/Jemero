@@ -12,6 +12,12 @@ const { startServer } = require('./serve.cjs')
 const { createPackStore } = require('./pack-store.cjs')
 const { startStaticServer } = require('./static-server.cjs')
 const { createPackRoutes } = require('./pack-routes.cjs')
+const { installNetGuard, guardFetch } = require('./net-guard.cjs')
+
+// Every external request is recorded; JEMERO_OFFLINE=1 refuses them as an
+// unplugged network would (the offline check runs with it).
+const externalLog = () => path.join(runtime.appSupport(), 'logs', 'external-requests.jsonl')
+guardFetch(externalLog(), { offline: process.env.JEMERO_OFFLINE === '1' })
 
 const isDev = !app.isPackaged
 
@@ -267,6 +273,38 @@ function registerPackIpc() {
     }
     return res
   })
+  // "Offline ready", the parts only this process can check: the runtime
+  // starts, a model answers, every installed pack still verifies. The canvas
+  // sample and saved work are checked in the renderer (OfflineCheck.tsx).
+  ipcMain.handle('offline:check', async () => {
+    const { URL_BASE } = require('./model.cjs')
+    const runtimeCheck = runtime.verifyRuntime()
+    let modelCheck
+    const serving = await probe()
+    if (!serving) {
+      modelCheck = { ok: false, detail: 'No model is running.' }
+    } else {
+      try {
+        const res = await fetch(`${URL_BASE}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ model: serving, messages: [{ role: 'user', content: 'Say OK.' }], max_tokens: 2, temperature: 0 }),
+          signal: AbortSignal.timeout(60_000),
+        })
+        modelCheck = res.ok ? { ok: true, detail: serving } : { ok: false, detail: `${serving} answered ${res.status}` }
+      } catch (err) {
+        modelCheck = { ok: false, detail: `${serving} didn’t answer: ${err.message}` }
+      }
+    }
+    const store = await packs()
+    const installed = await store.installed()
+    const packChecks = {}
+    for (const id of Object.keys(installed)) {
+      const problems = await store.verifyInstalled(id)
+      packChecks[id] = problems.length ? { ok: false, detail: problems[0] } : { ok: true, detail: installed[id].version }
+    }
+    return { runtime: runtimeCheck, model: modelCheck, packs: packChecks }
+  })
   ipcMain.handle('packs:cancel', async (_e, id) => ({ ok: (await packs()).cancel(id) }))
   ipcMain.handle('packs:remove', async (_e, id) => {
     const res = await (await packs()).remove(id)
@@ -346,6 +384,7 @@ function registerModelIpc() {
   })
 
   ipcMain.handle('models:activate', async (_e, modelId) => {
+    console.log(`[models] switching to ${modelId}`)
     emit({ id: modelId, phase: 'activating' })
     const res = await switchModel(modelId, (status) => emit({ id: modelId, phase: 'activating', message: status }))
     emit({ id: modelId, phase: res.ok ? 'active' : 'error', message: res.ok ? undefined : res.reason })
@@ -358,6 +397,8 @@ async function bootstrap() {
   // by scripts/dev-name.mjs); the packaged app carries ours in its bundle.
   if (isDev && process.platform === 'darwin') app.dock.setIcon(path.join(__dirname, '..', 'build', 'icon.png'))
   buildMenu()
+  // The preview boundary: nothing in a window may reach past loopback.
+  installNetGuard(require('electron').session.defaultSession, externalLog())
   registerStoreIpc('settings', { pretty: true })
   registerStoreIpc('library')
   registerModelIpc()
@@ -425,6 +466,9 @@ async function bootstrap() {
 // Two instances would start two model servers on one port and race each other
 // writing library.json. Refuse the second launch and focus the window that
 // already exists.
+// A separate profile, so a test run doesn't collide with the copy in use.
+if (process.env.JEMERO_USER_DATA) app.setPath('userData', process.env.JEMERO_USER_DATA)
+
 if (!app.requestSingleInstanceLock()) {
   console.log('Jemero is already running, focusing that window.')
   app.quit()

@@ -99,6 +99,11 @@ type Bridge = {
   activate(modelId: string): Promise<{ ok: boolean; reason?: string }>
   /** Packs for offline use (electron/pack-store.cjs). */
   packs: PackBridge
+  offlineCheck(): Promise<{
+    runtime: { ok: boolean; detail: string }
+    model: { ok: boolean; detail: string }
+    packs: Record<string, { ok: boolean; detail: string }>
+  }>
   onMenu(fn: (which: 'models' | 'settings') => void): () => void
   onProgress(fn: (p: Progress) => void): () => void
 }

@@ -3,6 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- The preview boundary: a component loads code, styles, fonts and images
+         from this loopback server (the base kit and installed packs) or inline,
+         and talks to nothing else. electron/net-guard.cjs enforces the same. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src http://127.0.0.1:* http://localhost:* blob: 'unsafe-inline' 'unsafe-eval'; style-src http://127.0.0.1:* http://localhost:* 'unsafe-inline'; font-src http://127.0.0.1:* http://localhost:* data:; img-src http://127.0.0.1:* http://localhost:* data: blob:; media-src data: blob:; connect-src http://127.0.0.1:* http://localhost:* data: blob:; worker-src blob:; frame-src 'none'; form-action 'none'"
+    />
     <title>Canvas</title>
     <script>
       // A few bundled libraries still read process.env at runtime.

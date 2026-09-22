@@ -108,9 +108,44 @@ async function download(onStatus = () => {}, dest = cacheDir()) {
   return bin
 }
 
-/** The one call the rest of the app makes. */
+/** Running as the packaged app (not `electron .`, not plain node). */
+const isPackaged = () => !!process.versions.electron && !process.defaultApp
+
+/** The runtime is part of the packaged app; not finding it there is damage, not a first run. */
+function missingFromApp() {
+  const expected = process.resourcesPath ? path.join(process.resourcesPath, 'llama', 'llama-server') : 'Resources/llama'
+  return new Error(
+    `The llama.cpp runtime (build ${BUILD}) is missing from this copy of Jemero: expected ${expected}. ` +
+      'Reinstall Jemero. It is not downloaded automatically, so an incomplete install shows up here instead of on a plane.',
+  )
+}
+
+/**
+ * The one call the rest of the app makes. The packaged app ships its runtime
+ * and never falls back to downloading one; only development (no vendor/ yet)
+ * fetches it.
+ */
 async function ensureRuntime(onStatus = () => {}) {
-  return find() ?? (await download(onStatus))
+  const bin = find()
+  if (bin) return bin
+  if (isPackaged()) throw missingFromApp()
+  return download(onStatus)
+}
+
+/**
+ * Does the runtime actually start? Runs `llama-server --version` (it loads the
+ * Metal and ggml libraries the server needs). For the offline-ready check.
+ */
+function verifyRuntime() {
+  const bin = find()
+  if (!bin) return { ok: false, detail: isPackaged() ? missingFromApp().message : `llama.cpp ${BUILD} isn't installed yet.` }
+  // It prints the version to stderr; loading its libraries can take a while while the GPU is busy.
+  const r = require('node:child_process').spawnSync(bin, ['--version'], { encoding: 'utf8', timeout: 45000, cwd: path.dirname(bin) })
+  const text = `${r.stdout ?? ''}${r.stderr ?? ''}`
+  const version = text.split('\n').find((l) => /^version:/i.test(l.trim()))?.trim()
+  if (r.status === 0 || version) return { ok: true, detail: version ?? `llama.cpp ${BUILD}`, path: bin }
+  const why = r.error?.message ?? (r.signal ? `stopped by ${r.signal}` : text.trim().split('\n').slice(-2).join(' '))
+  return { ok: false, detail: `llama-server failed to start: ${why}`, path: bin }
 }
 
 /** Where the runtime came from, for the UI and `npm run models`. */
@@ -125,4 +160,4 @@ function describe() {
   return { build: BUILD, path: bin, source }
 }
 
-module.exports = { ensureRuntime, find, download, describe, BUILD, appSupport, cacheDir, vendorDir, assetUrl }
+module.exports = { ensureRuntime, verifyRuntime, isPackaged, find, download, describe, BUILD, appSupport, cacheDir, vendorDir, assetUrl }

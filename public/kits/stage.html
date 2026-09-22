@@ -3,13 +3,26 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- The preview boundary: a component loads code, styles, fonts and images
+         from this loopback server (the base kit and installed packs) or inline,
+         and talks to nothing else. electron/net-guard.cjs enforces the same. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src http://127.0.0.1:* http://localhost:* blob: 'unsafe-inline' 'unsafe-eval'; style-src http://127.0.0.1:* http://localhost:* 'unsafe-inline'; font-src http://127.0.0.1:* http://localhost:* data:; img-src http://127.0.0.1:* http://localhost:* data: blob:; media-src data: blob:; connect-src http://127.0.0.1:* http://localhost:* data: blob:; worker-src blob:; frame-src 'none'; form-action 'none'"
+    />
     <title>Canvas</title>
     <script>
       // A few bundled libraries still read process.env at runtime.
       window.process = { env: { NODE_ENV: 'development' } }
     </script>
-    <!-- Every package a component may import, bundled locally by scripts/kits.mjs. -->
-    <script type="importmap">{
+    <script>
+      // One import map: the base kit (bundled by scripts/kits.mjs) plus the
+      // installed packs, which the host passes in the URL hash. Built here and
+      // inserted before any module loads, because a map can't change after.
+      // Only /packs/<id>/<version>/files/… on this server is accepted: the
+      // local pack routes, which serve verified files alone.
+      ;(() => {
+        const map = {
   "imports": {
     "@/components/ui/tooltip": "./vendor/ui__tooltip.js",
     "@/lib/utils": "./vendor/lib__utils.js",
@@ -118,7 +131,29 @@
     "tailwind-merge": "./vendor/tailwind-merge.js",
     "class-variance-authority": "./vendor/class-variance-authority.js"
   }
-}</script>
+}
+        const PACK_RE = /^\/packs\/[a-z0-9][a-z0-9-]*\/\d[0-9A-Za-z.+-]*\/files\/[^?#]+$/
+        const PACK_URL = { test: (u) => PACK_RE.test(u) && !u.split('/').some((seg) => seg === '..' || seg === '.') }
+        let packs = {}
+        try {
+          const m = /(?:^#|&)packs=([^&]*)/.exec(location.hash)
+          if (m) packs = JSON.parse(decodeURIComponent(m[1]))
+        } catch {}
+        const styles = {}
+        for (const [spec, url] of Object.entries(packs.imports || {})) {
+          // A pack never overrides the base kit: one React, one Radix.
+          if (typeof url !== 'string' || !PACK_URL.test(url) || spec in map.imports) continue
+          map.imports[spec] = url
+          const css = ((packs.styles || {})[spec] || []).filter((u) => typeof u === 'string' && PACK_URL.test(u))
+          if (css.length) styles[spec] = css
+        }
+        window.__jemeroPackStyles = styles
+        const el = document.createElement('script')
+        el.type = 'importmap'
+        el.textContent = JSON.stringify(map)
+        document.currentScript.after(el)
+      })()
+    </script>
     <style>
       /* Unlayered on purpose: these beat Tailwind's preflight and the kits'
          global styles, and only touch the canvas, never the component. */

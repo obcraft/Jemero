@@ -40,6 +40,9 @@ export default defineConfig({
   },
   server: {
     port: 5273,
+    // An end-to-end run (scripts/e2e-offline.mjs) must not be hot-reloaded by
+    // edits made while it runs.
+    ...(process.env.JEMERO_E2E ? { hmr: false, watch: { ignored: ['**/*'] } } : {}),
     proxy: {
       ...(PACK_ROUTES ? { '/packs': { target: PACK_ROUTES, changeOrigin: true } } : {}),
       // Same-origin proxy: the page never has to make a cross-origin call to

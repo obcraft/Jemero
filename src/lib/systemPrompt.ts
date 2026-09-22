@@ -71,10 +71,17 @@ export function buildSystem(opts: {
   packs?: { id: string; pack: InstalledPack }[]
 }): string {
   const format = opts.review ? '' : opts.plan ? FORMAT_WITH_PLAN : FORMAT_NO_PLAN
-  return [opts.base.trim(), format, KIND_BRIEF[opts.kind], kitById(opts.kit).prompt(opts.manifest), packBrief(opts.packs ?? [])]
+  // The offline rule sits with the brief, not last: placed at the very end it
+  // made small models (Qwen2.5-Coder 1.5B) stop after echoing the request.
+  return [opts.base.trim(), format, `${KIND_BRIEF[opts.kind]} ${BOUNDARY}`, kitById(opts.kit).prompt(opts.manifest), packBrief(opts.packs ?? [])]
     .filter(Boolean)
     .join('\n\n')
 }
+
+/** The preview has no internet (electron/net-guard.cjs and the canvas CSP block it). */
+const BOUNDARY =
+  'The preview has no internet, so remote images, fonts, scripts and API calls never load: draw with inline SVG, CSS ' +
+  'and the icons, and put realistic sample data in the file.'
 
 /** What the model may import from the packs chosen for this request, and nothing more. */
 function packBrief(packs: { id: string; pack: InstalledPack }[]): string {
@@ -104,7 +111,9 @@ function history(item: Item): string {
 }
 
 export function buildRequest(kind: Kind, prompt: string): string {
-  return `Build this ${kind}: ${prompt}`
+  // The closing cue matters to small models: without it Qwen2.5-Coder 1.5B
+  // often restates the request and stops, never opening the <file>.
+  return `Build this ${kind}: ${prompt}\n\nWrite the <file> now.`
 }
 
 export function refineRequest(item: Item, base: Version, n: number, prompt: string): string {
