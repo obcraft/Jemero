@@ -9,6 +9,9 @@ const hub = require('./hub.cjs')
 const models = require('./install.cjs')
 const runtime = require('./runtime.cjs')
 const { startServer } = require('./serve.cjs')
+const { createPackStore } = require('./pack-store.cjs')
+const { startStaticServer } = require('./static-server.cjs')
+const { createPackRoutes } = require('./pack-routes.cjs')
 
 const isDev = !app.isPackaged
 
@@ -198,6 +201,80 @@ function registerStoreIpc(name, { pretty = false } = {}) {
   })
 }
 
+/**
+ * The pack store, created on first use. Packs come from JEMERO_PACKS_URL; in
+ * development, without it, from packs-dist/ (npm run packs) served on
+ * 127.0.0.1, so the real download path runs. A packaged build with no source
+ * still lists and serves what is installed.
+ */
+let packStore = null
+let packRoutes = null
+function packs() {
+  packStore ??= (async () => {
+    let sourceUrl = process.env.JEMERO_PACKS_URL ?? null
+    const dist = path.join(__dirname, '..', 'packs-dist')
+    if (!sourceUrl && isDev && require('node:fs').existsSync(path.join(dist, 'index.signed.json'))) {
+      sourceUrl = (await startStaticServer(dist)).url
+    }
+    const store = createPackStore({ root: path.join(runtime.appSupport(), 'packs'), sourceUrl })
+    packRoutes = createPackRoutes(store)
+    await packRoutes.rebuild()
+    return store
+  })()
+  return packStore
+}
+
+/** After an install or removal: re-verify what's served, and let the canvas reload its import map. */
+async function packsChanged() {
+  await packRoutes?.rebuild()
+  if (win && !win.isDestroyed()) win.webContents.send('packs:changed')
+}
+
+/**
+ * In development Vite serves the app, so the pack routes run on their own
+ * loopback server and Vite proxies /packs to it (vite.config.ts).
+ */
+async function startDevPackRoutes() {
+  await packs()
+  const http = require('node:http')
+  const server = http.createServer((req, res) => {
+    packRoutes.handle(req, res).then((handled) => handled || res.writeHead(404).end())
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  process.env.JEMERO_PACK_ROUTES = `http://127.0.0.1:${server.address().port}`
+}
+
+function registerPackIpc() {
+  ipcMain.handle('packs:list', async () => {
+    const store = await packs()
+    const installed = await store.installed()
+    try {
+      const { catalog, fromCache } = await store.catalog()
+      return { ok: true, packs: catalog.packs, installed, fromCache, source: store.sourceUrl }
+    } catch (err) {
+      return { ok: false, reason: err.message, packs: [], installed, fromCache: true, source: store.sourceUrl }
+    }
+  })
+  ipcMain.handle('packs:install', async (_e, id) => {
+    const res = await (await packs()).install(id, (p) => {
+      // 'done' goes out once the canvas can actually load the pack.
+      if (p.phase === 'done') return
+      if (win && !win.isDestroyed()) win.webContents.send('packs:progress', p)
+    })
+    if (res.ok) {
+      await packsChanged()
+      if (win && !win.isDestroyed()) win.webContents.send('packs:progress', { id, phase: 'done' })
+    }
+    return res
+  })
+  ipcMain.handle('packs:cancel', async (_e, id) => ({ ok: (await packs()).cancel(id) }))
+  ipcMain.handle('packs:remove', async (_e, id) => {
+    const res = await (await packs()).remove(id)
+    if (res.ok) await packsChanged()
+    return res
+  })
+}
+
 function registerModelIpc() {
   ipcMain.handle('models:chat-budget', async (_e, request) => {
     const { chatBudget } = require('./chat-context.cjs')
@@ -284,6 +361,7 @@ async function bootstrap() {
   registerStoreIpc('settings', { pretty: true })
   registerStoreIpc('library')
   registerModelIpc()
+  registerPackIpc()
   // Before ensureModel, so the model picked at launch already follows the switch.
   try {
     const saved = JSON.parse(require('node:fs').readFileSync(path.join(runtime.appSupport(), 'settings.json'), 'utf8'))
@@ -312,6 +390,7 @@ async function bootstrap() {
   let url
   if (isDev) {
     showBootScreen('Starting dev server…')
+    await startDevPackRoutes()
     const port = process.env.JEMERO_DEV_PORT ? Number(process.env.JEMERO_DEV_PORT) : await freePort()
     const devUrl = `http://localhost:${port}`
     startVite(port)
@@ -321,7 +400,8 @@ async function bootstrap() {
     }
     url = devUrl
   } else {
-    url = await startServer(path.join(__dirname, '..', 'dist'))
+    await packs()
+    url = await startServer(path.join(__dirname, '..', 'dist'), { packRoutes })
   }
 
   // Nothing downloaded yet: land on the model picker instead of an app that

@@ -334,7 +334,18 @@ export function compile(
   entry: string,
   kitId: KitId,
   manifest: Manifest,
-  { repair = true }: { repair?: boolean } = {},
+  {
+    repair = true,
+    missingPacks = {},
+  }: {
+    repair?: boolean
+    /**
+     * Specifier → pack name, for packs the catalog has but this Mac hasn't
+     * installed. Their imports are refused with that name, so nothing reaches
+     * the canvas before its pack is ready.
+     */
+    missingPacks?: Record<string, string>
+  } = {},
 ): Compiled {
   const started = performance.now()
   const notes: Note[] = []
@@ -471,6 +482,13 @@ export function compile(
             mod = root
           } else {
             const pkg = packageOf(mod)
+            const pack = missingPacks[mod] ?? missingPacks[pkg]
+            if (pack) {
+              throw new CompileError(
+                `${path} imports "${mod}" from the ${pack} pack, which isn't installed. Install it in Resources, or build it without ${pack}.`,
+                path,
+              )
+            }
             const instead = INSTEAD[mod] ?? INSTEAD[pkg]
             throw new CompileError(
               `${path} imports "${pkg}", which isn't installed, and the canvas is offline.` +

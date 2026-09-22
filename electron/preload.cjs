@@ -35,6 +35,24 @@ contextBridge.exposeInMainWorld('jemero', {
   remove: (modelId) => invoke('models:remove', modelId),
   /** Restart the local server on a different model. */
   activate: (modelId) => invoke('models:activate', modelId),
+  /** Packs: the signed catalog, what's installed, and installing with progress. */
+  packs: {
+    list: () => invoke('packs:list'),
+    install: (id) => invoke('packs:install', id),
+    cancel: (id) => invoke('packs:cancel', id),
+    remove: (id) => invoke('packs:remove', id),
+    onProgress: (fn) => {
+      const listener = (_event, payload) => fn(payload)
+      ipcRenderer.on('packs:progress', listener)
+      return () => ipcRenderer.removeListener('packs:progress', listener)
+    },
+    /** A pack was activated or removed: reload what the canvas can import. */
+    onChanged: (fn) => {
+      const listener = () => fn()
+      ipcRenderer.on('packs:changed', listener)
+      return () => ipcRenderer.removeListener('packs:changed', listener)
+    },
+  },
   /** Menu-bar commands (⌘L, ⌘,). Returns an unsubscribe function. */
   onMenu: (fn) => {
     const listener = (_event, which) => fn(which)

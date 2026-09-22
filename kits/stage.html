@@ -8,8 +8,36 @@
       // A few bundled libraries still read process.env at runtime.
       window.process = { env: { NODE_ENV: 'development' } }
     </script>
-    <!-- Every package a component may import, bundled locally by scripts/kits.mjs. -->
-    <script type="importmap">/*IMPORTMAP*/</script>
+    <script>
+      // One import map: the base kit (bundled by scripts/kits.mjs) plus the
+      // installed packs, which the host passes in the URL hash. Built here and
+      // inserted before any module loads, because a map can't change after.
+      // Only /packs/<id>/<version>/files/… on this server is accepted: the
+      // local pack routes, which serve verified files alone.
+      ;(() => {
+        const map = /*IMPORTMAP*/
+        const PACK_RE = /^\/packs\/[a-z0-9][a-z0-9-]*\/\d[0-9A-Za-z.+-]*\/files\/[^?#]+$/
+        const PACK_URL = { test: (u) => PACK_RE.test(u) && !u.split('/').some((seg) => seg === '..' || seg === '.') }
+        let packs = {}
+        try {
+          const m = /(?:^#|&)packs=([^&]*)/.exec(location.hash)
+          if (m) packs = JSON.parse(decodeURIComponent(m[1]))
+        } catch {}
+        const styles = {}
+        for (const [spec, url] of Object.entries(packs.imports || {})) {
+          // A pack never overrides the base kit: one React, one Radix.
+          if (typeof url !== 'string' || !PACK_URL.test(url) || spec in map.imports) continue
+          map.imports[spec] = url
+          const css = ((packs.styles || {})[spec] || []).filter((u) => typeof u === 'string' && PACK_URL.test(u))
+          if (css.length) styles[spec] = css
+        }
+        window.__jemeroPackStyles = styles
+        const el = document.createElement('script')
+        el.type = 'importmap'
+        el.textContent = JSON.stringify(map)
+        document.currentScript.after(el)
+      })()
+    </script>
     <style>
       /* Unlayered on purpose: these beat Tailwind's preflight and the kits'
          global styles, and only touch the canvas, never the component. */

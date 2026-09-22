@@ -5,6 +5,10 @@ import react from '@vitejs/plugin-react'
 // 127.0.0.1:8757, override with JEMERO_URL.
 const ATOMIC = process.env.JEMERO_URL ?? 'http://127.0.0.1:8757'
 
+// Installed packs (electron/pack-routes.cjs), on the loopback server the
+// Electron shell starts before Vite. Absent in `npm run web`: no packs.
+const PACK_ROUTES = process.env.JEMERO_PACK_ROUTES
+
 /**
  * The canvas (public/kits/stage.html) runs in a sandboxed iframe with an opaque
  * origin, so to it the kit bundles are cross-origin, and module scripts need
@@ -37,6 +41,7 @@ export default defineConfig({
   server: {
     port: 5273,
     proxy: {
+      ...(PACK_ROUTES ? { '/packs': { target: PACK_ROUTES, changeOrigin: true } } : {}),
       // Same-origin proxy: the page never has to make a cross-origin call to
       // the model server.
       '/llm': {

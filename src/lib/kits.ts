@@ -3,6 +3,8 @@
 // modules components usually come from, and what the model needs to know to
 // use them without guessing.
 
+import type { InstalledManifest } from './packs'
+
 export type KitId = 'shadcn' | 'tailwind'
 
 export type Kit = {
@@ -26,8 +28,39 @@ export type Manifest = {
   sources: Record<string, string>
 }
 
-const EXTRAS =
-  'Also available everywhere: lucide-react (icons), motion/react (animation), clsx, date-fns, recharts (charts).'
+/**
+ * The base kit's own libraries, as the build installed them (manifest.versions),
+ * with what each is for. Only the ones actually in this build are listed;
+ * downloadable packs are described separately, per request (systemPrompt.ts).
+ */
+const BUILT_IN_ROLE: [spec: string, pkg: string, role: string][] = [
+  ['lucide-react', 'lucide-react', 'icons'],
+  ['motion/react', 'motion', 'animation'],
+  ['clsx', 'clsx', 'class names'],
+  ['date-fns', 'date-fns', 'dates'],
+  ['recharts', 'recharts', 'charts'],
+]
+
+function builtIns(m: Manifest): string {
+  const libs = BUILT_IN_ROLE.filter(([spec]) => m.imports[spec]).map(
+    ([spec, pkg, role]) => `${spec}${m.versions[pkg] ? ` ${m.versions[pkg]}` : ''} (${role})`,
+  )
+  return libs.length ? `Built in, always installed: ${libs.join(', ')}.` : ''
+}
+
+/** The kit manifest plus the installed packs' modules: what the compiler accepts. */
+export function withPacks(m: Manifest, installed: InstalledManifest): Manifest {
+  const imports = { ...m.imports }
+  const exports = { ...m.exports }
+  for (const p of Object.values(installed.packs)) {
+    for (const spec of Object.keys(p.imports)) {
+      if (imports[spec]) continue // the base kit wins: one React
+      imports[spec] = installed.imports[spec]
+      exports[spec] = p.exports[spec] ?? []
+    }
+  }
+  return { ...m, imports, exports }
+}
 
 const TOKENS =
   'Colours come from theme tokens that switch for dark mode by themselves: bg-background, bg-card, bg-popover, ' +
@@ -47,7 +80,7 @@ ${uiModules(m)
   .map((s) => `  ${s}: ${m.exports[s].filter((n) => n !== 'default' && !/Variants$/.test(n)).join(', ')}`)
   .join('\n')}
   @/lib/utils: cn
-${EXTRAS}
+${builtIns(m)}
 
 USAGE THAT MATTERS:
 - Searchable list or combobox: Popover + Command. CommandInput filters the CommandItems live by their value.
@@ -62,9 +95,9 @@ USAGE THAT MATTERS:
     blurb: 'No component library, just utilities',
     tailwind: true,
     autoImport: () => ['@/lib/utils'],
-    prompt: () => `KIT: Tailwind CSS v4 only. No component library: build from semantic HTML elements and handle the
+    prompt: (m) => `KIT: Tailwind CSS v4 only. No component library: build from semantic HTML elements and handle the
 interaction yourself (useState, keyboard handlers, click-outside with useEffect).
-${EXTRAS} cn() from '@/lib/utils' merges classes.
+${builtIns(m)} cn() from '@/lib/utils' merges classes.
 
 - ${TOKENS}`,
   },

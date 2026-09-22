@@ -7,6 +7,7 @@
 // on every launch. The browser build keeps it in localStorage.
 import { useSyncExternalStore } from 'react'
 import type { KitId } from './kits'
+import type { PackLock } from './packs'
 
 /** How big the thing is, which changes the canvas layout and the model's brief. */
 export type Kind = 'component' | 'block' | 'section'
@@ -19,6 +20,12 @@ export type Version = {
   /** The file the canvas renders. */
   entry: string
   kit: KitId
+  /**
+   * The exact pack versions this version's code was rendered with, so it can
+   * be reopened against them (or report what's missing). Absent on versions
+   * saved before packs existed.
+   */
+  packs?: PackLock
   /** The model's plan for this version, as it wrote it. */
   plan: string
   /** The request that produced it. */

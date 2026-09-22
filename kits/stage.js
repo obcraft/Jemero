@@ -183,8 +183,41 @@ async function loadKit(id) {
 
 // --- rendering -----------------------------------------------------------
 
+// --- pack styles ---------------------------------------------------------
+
+const linkedStyles = new Set()
+
+/**
+ * A pack's stylesheets (KaTeX's fonts and layout, say) load the first time a
+ * component imports one of its modules. The URLs come from the import map
+ * setup in stage.html, which only accepted verified local pack files.
+ */
+function linkPackStyles(modules) {
+  const styles = window.__jemeroPackStyles || {}
+  const specs = Object.keys(styles)
+  if (!specs.length) return Promise.resolve()
+  const loads = []
+  for (const m of modules) {
+    for (const spec of specs) {
+      const quoted = new RegExp(`(?:from\\s*|import\\s*\\(?\\s*)["']${spec.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}["']`)
+      if (!quoted.test(m.code)) continue
+      for (const href of styles[spec]) {
+        if (linkedStyles.has(href)) continue
+        linkedStyles.add(href)
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = href
+        loads.push(new Promise((resolve) => ((link.onload = resolve), (link.onerror = resolve))))
+        document.head.appendChild(link)
+      }
+    }
+  }
+  return Promise.all(loads)
+}
+
 /** Modules arrive dependency-first; relative imports point at "jemero:<path>". */
 async function importModules(modules, entry) {
+  await linkPackStyles(modules)
   const urls = {}
   for (const m of modules) {
     const code = m.code.replace(/(["'])jemero:([^"']+)\1/g, (match, quote, path) =>

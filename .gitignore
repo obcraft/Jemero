@@ -6,6 +6,8 @@ dist/
 release/
 # The canvas's kit bundles (7 MB), rebuilt by `npm run kits` from kits/
 public/kits/
+# Downloadable packs, rebuilt and signed by `npm run packs`
+packs-dist/
 *.tsbuildinfo
 .vite/
 
@@ -27,6 +29,8 @@ npm-debug.log*
 logs/
 
 # Environment and secrets
+# The pack signing key (npm run packs:keygen). Never commit it.
+.keys/
 .env
 .env.*
 !.env.example

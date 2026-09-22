@@ -17,8 +17,16 @@ const TYPES = {
   '.ico': 'image/x-icon',
 }
 
-function startServer(root) {
+/**
+ * @param {string} root  the built dist/
+ * @param {{ packRoutes?: { handle(req, res): Promise<boolean> } }} [opts]
+ *   installed packs, under /packs (electron/pack-routes.cjs)
+ */
+function startServer(root, { packRoutes } = {}) {
   const server = http.createServer(async (req, res) => {
+    // --- installed packs, verified files only ----------------------------
+    if (packRoutes && (await packRoutes.handle(req, res))) return
+
     // --- LLM proxy -------------------------------------------------------
     if (req.url.startsWith('/llm')) {
       const target = `${URL_BASE}/v1${req.url.slice(4)}`

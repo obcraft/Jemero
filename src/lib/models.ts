@@ -1,6 +1,8 @@
 // Renderer-side view of the model machinery in electron/.
 
 /** How the recommendation trades speed against quality. See catalog.cjs. */
+import type { PackBridge } from './packs'
+
 export type Priority = 'speed' | 'balanced' | 'quality'
 //
 // Everything here is a thin call over the preload bridge. In the browser build
@@ -95,6 +97,8 @@ type Bridge = {
   cancelInstall(modelId: string): Promise<{ ok: boolean }>
   remove(modelId: string): Promise<{ ok: boolean; reason?: string }>
   activate(modelId: string): Promise<{ ok: boolean; reason?: string }>
+  /** Packs for offline use (electron/pack-store.cjs). */
+  packs: PackBridge
   onMenu(fn: (which: 'models' | 'settings') => void): () => void
   onProgress(fn: (p: Progress) => void): () => void
 }

@@ -35,6 +35,7 @@ import ModelBrowser from './components/ModelBrowser'
 import ModelMenu from './components/ModelMenu'
 import SettingsPage from './components/SettingsPage'
 import QuantizeDialog from './components/QuantizeDialog'
+import ResourcesPage from './components/ResourcesPage'
 import Library from './components/Library'
 import Conversation, { type Draft } from './components/Conversation'
 import Stage, { type StageCode, type StageEvent } from './components/Stage'
@@ -175,7 +176,7 @@ export default function App() {
   // The shell opens the app at #models when nothing is downloaded yet, so a
   // first run lands on the browser rather than on a chat that can't answer.
   /** A full page in place of the library and workspace, opened from the rail. */
-  const [page, setPage] = useState<'models' | 'settings' | null>(() =>
+  const [page, setPage] = useState<'models' | 'settings' | 'resources' | null>(() =>
     window.location.hash === '#models' ? 'models' : window.location.hash === '#settings' ? 'settings' : null,
   )
   const [menuOpen, setMenuOpen] = useState(false)
@@ -781,7 +782,12 @@ export default function App() {
               <path d="M15 2v2M15 20v2M2 15h2M2 9h2M20 15h2M20 9h2M9 2v2M9 20v2" />
             </svg>
           </button>
-          <button className="rail-btn" disabled title="Resources (coming soon)" aria-label="Resources (coming soon)">
+          <button
+            className={`rail-btn${page === 'resources' ? ' active' : ''}`}
+            onClick={() => setPage((p) => (p === 'resources' ? null : 'resources'))}
+            title="Resources"
+            aria-label="Resources"
+          >
             {/* Lucide "book-open" (ISC licence). */}
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 7v14" />
@@ -798,6 +804,7 @@ export default function App() {
           </button>
         </nav>
         {page === 'settings' && <SettingsPage onClose={() => setPage(null)} />}
+        {page === 'resources' && <ResourcesPage onClose={() => setPage(null)} />}
         {page === 'models' && (
           <ModelBrowser
             open

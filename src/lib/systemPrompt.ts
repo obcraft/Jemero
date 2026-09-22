@@ -3,6 +3,7 @@
 // is being built. Requests are stateless: a follow-up sends the current code
 // plus a short list of earlier requests instead of the whole conversation, so a
 // long refinement session never overflows a 16k context.
+import type { InstalledPack } from './packs'
 import { kitById, type KitId, type Manifest } from './kits'
 import type { Item, Kind, Version } from './library'
 
@@ -66,11 +67,25 @@ export function buildSystem(opts: {
   manifest: Manifest
   plan: boolean
   review?: boolean
+  /** Installed packs chosen for this request: their exact imports and exports. */
+  packs?: { id: string; pack: InstalledPack }[]
 }): string {
   const format = opts.review ? '' : opts.plan ? FORMAT_WITH_PLAN : FORMAT_NO_PLAN
-  return [opts.base.trim(), format, KIND_BRIEF[opts.kind], kitById(opts.kit).prompt(opts.manifest)]
+  return [opts.base.trim(), format, KIND_BRIEF[opts.kind], kitById(opts.kit).prompt(opts.manifest), packBrief(opts.packs ?? [])]
     .filter(Boolean)
     .join('\n\n')
+}
+
+/** What the model may import from the packs chosen for this request, and nothing more. */
+function packBrief(packs: { id: string; pack: InstalledPack }[]): string {
+  if (!packs.length) return ''
+  const lines = packs.flatMap(({ pack }) => [
+    `  ${pack.name} ${pack.version}${pack.description ? `: ${pack.description}` : ''}`,
+    ...Object.keys(pack.imports).map(
+      (spec) => `    '${spec}' exports: ${(pack.exports[spec] ?? []).filter((n) => !n.startsWith('__')).join(', ')}`,
+    ),
+  ])
+  return `PACKS, installed for this request. Import them exactly as listed; their stylesheets load by themselves:\n${lines.join('\n')}`
 }
 
 function filesBlock(v: Version): string {
