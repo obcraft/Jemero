@@ -1,226 +1,208 @@
-// Hugging Face search: any GGUF chat model, sized for this Mac like a catalog one.
-//
-// The catalog (catalog.cjs) is a judgement about which models write good
-// components. Search is for everything else, a Gemma, a Llama, a Phi, whatever
-// came out last week, and every result goes through the same fit check and
-// quant picker. Nothing is guessed: file sizes and checksums come from the Hub
-// API, and the layers, KV heads and context window from the GGUF header itself.
-const { CATALOG, QUANT_PENALTY, SPEED_TARGETS, SPEED_TARGET, TARGET_CTX, bestPlan, downloadUrl, remember } = require('./catalog.cjs')
+// Public Hugging Face GGUF discovery. Sizes and memory layouts come from the
+// Hub and GGUF headers; popularity ranks results but never excludes a model.
+const { QUANT_PENALTY, SPEED_TARGETS, SPEED_TARGET, TARGET_CTX, bestPlan, downloadUrl, remember } = require('./catalog.cjs')
 const { readMetadata, kvBytes, activeParams } = require('./gguf.cjs')
 
 const HUB = 'https://huggingface.co'
-const MAX_RESULTS = 8
-const TIMEOUT_MS = 12000
+const PAGE_SIZE = 24
+const TIMEOUT_MS = 20000
 const CACHE_MS = 10 * 60 * 1000
-
-/**
- * Past the model someone is looking for, a search trails off into hundreds of
- * one-off fine-tunes with a few hundred downloads each. Anything used less than
- * this share of the query's most-used model is that tail.
- */
-const MIN_SHARE = 0.03
-
-/** "org/name", with no "." or ".." segment. */
 const REPO_ID = /^[\w-][\w.-]*\/[\w-][\w.-]*$/
-
-/** Speculative-decoding drafts: small companions to a big model, not models to chat with. */
 const DRAFT = /\b(?:dflash|eagle\d*|draft)\b/i
-
-/**
- * Bits per weight a real 4- to 8-bit file lands in. A file far outside it
- * isn't this repo's model at all (a draft head, a projector, a mislabelled
- * upload), and sizing the model from it would make the fit check a lie.
- */
-const BITS_PER_WEIGHT = [3, 12]
-
-/** A GGUF with one of these pipelines is something other than a chat model. */
 const NOT_CHAT = new Set([
-  'feature-extraction',
-  'sentence-similarity',
-  'fill-mask',
-  'text-classification',
-  'token-classification',
-  'zero-shot-classification',
-  'text-ranking',
-  'text-to-speech',
-  'text-to-audio',
-  'automatic-speech-recognition',
-  'audio-to-audio',
-  'text-to-image',
-  'image-to-image',
+  'feature-extraction', 'sentence-similarity', 'fill-mask', 'text-classification',
+  'token-classification', 'zero-shot-classification', 'text-ranking',
+  'text-to-speech', 'text-to-audio', 'automatic-speech-recognition',
+  'audio-to-audio', 'text-to-image', 'image-to-image',
 ])
+// Architectures in the pinned llama.cpp runtime. Unknown/new architectures stay
+// visible but disabled until their runtime support and memory layout are known.
+const SUPPORTED_ARCH = new Set(require('./runtime-architectures.json'))
 
-/**
- * A search result has no codingScore, nobody has judged it. Within one model
- * the score only chooses the quantization, so any constant works; this one
- * keeps unjudged models below the catalog's when both are downloaded.
- */
-const UNRATED_SCORE = 50
-
-/**
- * The quant tag in a GGUF file name, if it's one the catalog would offer.
- * Files in subfolders and multi-part files are skipped: the store downloads
- * one file per model, and those layouts are only used for very large quants.
- */
 function quantOf(file) {
-  if (file.includes('/') || !/\.gguf$/i.test(file) || /mmproj|-\d{5}-of-\d{5}/i.test(file) || DRAFT.test(file)) return null
-  const m = /(?:^|[-_.])((?:UD-)?(?:I?Q\d(?:_[A-Z0-9]+)*|MXFP4(?:_MOE)?))$/i.exec(file.replace(/\.gguf$/i, ''))
-  if (!m) return null
-  let tag = m[1].toUpperCase()
-  if (/^Q\d_K_XL$/.test(tag)) tag = `UD-${tag}` // unsloth's older spelling
+  if (!file || file.split('/').some((p) => !p || p === '.' || p === '..') || file.includes('\\')) return null
+  if (!/\.gguf$/i.test(file) || /mmproj|projector|(?:^|[-_.])(?:vision|audio|mtp)(?:[-_.]|$)|-\d{5}-of-\d{5}/i.test(file) || DRAFT.test(file)) return null
+  const match = /(?:^|[-_.])((?:UD-)?(?:I?Q\d(?:_[A-Z0-9]+)*|MXFP4(?:_MOE)?|BF16|F16|F32))$/i.exec(file.replace(/\.gguf$/i, ''))
+  if (!match) return null
+  let tag = match[1].toUpperCase()
+  if (/^Q\d_K_XL$/.test(tag)) tag = `UD-${tag}`
   return tag in QUANT_PENALTY ? tag : null
 }
 
-/**
- * The model a repo quantizes, as one name: "unsloth/gemma-3-1b-it-GGUF",
- * "ggml-org/gemma-3-1b-it-GGUF" and "bartowski/google_gemma-3-1b-it-GGUF"
- * are all "gemma-3-1b-it", and should be one row, not three.
- */
 function modelName(repo, baseModel) {
   let name = repo.split('/')[1].replace(/[-_.]gguf(?=[-_.]|$)/i, '')
-  const baseOrg = baseModel?.split('/')[0]
+  const baseOrg = typeof baseModel === 'string' ? baseModel.split('/')[0] : null
   if (baseOrg && name.toLowerCase().startsWith(`${baseOrg.toLowerCase()}_`)) name = name.slice(baseOrg.length + 1)
-  // "gemma-3-1b-it-qat-q4_0" is the same model as "gemma-3-1b-it-qat".
   return name.replace(/[-_.](?:i?q\d\w*|bf16|f16)$/i, '')
 }
 
-async function getJSON(url) {
+async function getResponse(url) {
   const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) })
   if (res.status === 429) throw new Error('Hugging Face is limiting searches right now. Try again in a minute.')
   if (!res.ok) throw new Error(`Hugging Face returned ${res.status}.`)
-  return res.json()
+  return res
 }
+const getJSON = async (url) => (await getResponse(url)).json()
 
-/** Run `fn` over `items`, at most `limit` at a time, keeping order. */
 async function mapLimit(items, limit, fn) {
   const out = new Array(items.length)
   let next = 0
-  const worker = async () => {
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (next < items.length) {
       const i = next++
       out[i] = await fn(items[i])
     }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  }))
   return out
 }
 
-/** Per repo, for the session: an overlapping query ("gemma" → "gemma 1b") costs nothing twice. */
 const repoCache = new Map()
-
-/**
- * A catalog entry for one repo. Null when it can't be sized honestly (no
- * usable quant, or a header we can't read), because a model with a made-up
- * fit is worse than a model left out.
- */
-async function toEntry({ name, repo, hit, downloads }) {
+async function toEntry(hit) {
+  const repo = hit.id
   if (!repoCache.has(repo)) {
-    // A network failure is forgotten so the next search retries; a repo that
-    // simply has nothing usable stays cached as null.
-    repoCache.set(repo, describeRepo(name, repo, hit).catch(() => (repoCache.delete(repo), null)))
+    const name = modelName(repo, [].concat(hit.cardData?.base_model ?? [])[0])
+    repoCache.set(repo, describeRepo(name, repo, hit).catch((err) => {
+      repoCache.delete(repo)
+      throw err
+    }))
   }
   const entry = await repoCache.get(repo)
-  return entry && remember({ ...entry, downloads })
+  return entry && remember({ ...entry, downloads: hit.downloads ?? 0 })
 }
 
-async function describeRepo(name, repo, hit) {
+async function describeRepo(name, repo, hit = {}) {
   const info = await getJSON(`${HUB}/api/models/${repo}?blobs=true`)
-  const total = hit.gguf?.total
-  const byTag = new Map()
-  for (const s of info.siblings ?? []) {
+  if (info.gated) throw new Error('This repository requires Hugging Face access approval. Use a public GGUF conversion.')
+  if (NOT_CHAT.has(info.pipeline_tag) || DRAFT.test(repo)) return null
+  const total = info.gguf?.total ?? hit.gguf?.total
+  const quants = (info.siblings ?? []).flatMap((s) => {
     const tag = quantOf(s.rfilename)
     const bytes = s.lfs?.size ?? s.size
-    if (!tag || !bytes || byTag.has(tag)) continue
-    const bits = total ? (bytes * 8) / total : null
-    if (bits !== null && (bits < BITS_PER_WEIGHT[0] || bits > BITS_PER_WEIGHT[1])) continue
-    byTag.set(tag, { tag, file: s.rfilename, bytes })
-  }
-  const quants = [...byTag.values()]
+    if (!tag || !Number.isFinite(bytes) || bytes <= 0) return []
+    // Repositories can also hold small companion networks. Their size must not
+    // be mistaken for the full LLM's weights (especially full-precision heads).
+    const bits = tag === 'F32' ? 32 : /^(?:BF16|F16)$/.test(tag) ? 16 : Number(/(?:I?Q)(\d)/.exec(tag)?.[1] ?? 4)
+    if (total && bytes * 8 / total < bits * 0.6) return []
+    return [{ tag, file: s.rfilename, bytes }]
+  })
   if (!quants.length) return null
-
-  // Every quant of a model shares one header; the smallest file answers fastest.
-  const smallest = quants.reduce((a, b) => (b.bytes < a.bytes ? b : a))
+  const smallest = quants.reduce((a, b) => b.bytes < a.bytes ? b : a)
   const meta = await readMetadata(downloadUrl({ repo }, smallest), { signal: AbortSignal.timeout(TIMEOUT_MS) })
   const arch = meta['general.architecture']
   const kv = kvBytes(meta, TARGET_CTX)
-  if (!arch || kv === null) return null
-
-  const params = hit.gguf?.total ? hit.gguf.total / 1e9 : null
-  const active = params ? activeParams(meta, hit.gguf.total) : null
+  const maxCtx = meta[`${arch}.context_length`] ?? info.gguf?.context_length ?? hit.gguf?.context_length
+  const validLayout = Number.isFinite(kv) && kv >= 0 && Number.isFinite(maxCtx) && maxCtx > 0
+  const labelParams = /(\d+(?:\.\d+)?)\s*([bm])/i.exec(String(meta['general.size_label'] ?? name))
+  const params = total ? total / 1e9 : labelParams ? Number(labelParams[1]) / (labelParams[2].toLowerCase() === 'm' ? 1000 : 1) : null
+  const active = total ? activeParams(meta, total) : null
   return {
-    id: `hf:${repo}`,
-    source: 'hub',
-    label: name,
-    repo,
-    params: params && round(params),
-    ...(active && { activeParams: round(active), moe: true }),
-    codingScore: UNRATED_SCORE,
+    id: `hf:${repo}`, source: 'hub', storageVersion: 2, label: name, repo,
+    params: params && Math.round(params * 1000) / 1000,
+    ...(active && { activeParams: Math.round(active * 100) / 100, moe: true }),
+    codingScore: 50,
     qat: /\bqat\b/i.test(repo.replace(/[-_]/g, ' ')),
-    // Measured at the 16k this app serves, so sliding-window layers (which hold
-    // a fixed window, not the whole context) are costed at what they really take.
-    kvKiBPerToken: kv / 1024 / TARGET_CTX,
-    maxCtx: meta[`${arch}.context_length`] ?? hit.gguf?.context_length ?? TARGET_CTX,
-    ...(arch === 'gpt-oss' && {
-      formatRisk: 'Emits reasoning in its own channel format rather than <think>, which the parser strips.',
-    }),
-    tags: [arch],
+    kvKiBPerToken: validLayout ? kv / 1024 / TARGET_CTX : 0,
+    // Preserve the layout: sliding-window memory is not linear in context size.
+    kvMetadata: Object.fromEntries(Object.entries(meta).filter(([key]) => key === 'general.architecture' || key.startsWith(`${arch}.`))),
+    maxCtx: Number.isFinite(maxCtx) ? maxCtx : 0,
+    unsupportedReason: !SUPPORTED_ARCH.has(arch)
+      ? `The bundled runtime does not support ${arch ?? 'this architecture'}.`
+      : !validLayout ? 'The model’s memory requirements could not be verified.' : null,
+    tags: [arch ?? 'gguf', ...(params && params <= 1 ? ['tiny'] : [])],
     blurb: `From huggingface.co/${repo}`,
     quants,
   }
 }
 
-const searches = new Map() // normalised query -> { at, entries }
+function repoFromQuery(query) {
+  const raw = query.replace(/^https?:\/\/(?:www\.)?(?:huggingface\.co|hf\.co)\//i, '').replace(/\/$/, '')
+  return REPO_ID.test(raw) ? raw : null
+}
 
-/**
- * Chat models on Hugging Face matching `query`, most used first, each at its
- * best quantization for `device`. Catalog models are left out: the browser
- * already lists them, with a real judgement behind them.
- */
-async function search(query, device, priority = 'balanced') {
+const wordsFor = (q) => q.toLowerCase().split(/[\s/_-]+/).filter(Boolean)
+function matchesWord(haystack, word) {
+  if (/^\d+(?:\.\d+)?[bm]$/i.test(word)) {
+    const escaped = word.replace('.', '\\.')
+    return new RegExp(`(?:^|[^0-9.])${escaped}(?![a-z0-9])`, 'i').test(haystack)
+  }
+  return haystack.includes(word)
+}
+const searches = new Map()
+
+/** A cursor walks all matching Hub repositories, with no popularity cutoff. */
+async function searchPage(query, device, priority = 'balanced', page = 0) {
   const q = String(query ?? '').trim().replace(/\s+/g, ' ')
-  if (q.length < 2) return []
+  if (q.length < 2) return { results: [], hasMore: false }
+  if (!Number.isInteger(page) || page < 0 || page > 1000) throw new Error('Invalid search page.')
   const key = q.toLowerCase()
-  let hit = searches.get(key)
-  if (!hit || Date.now() - hit.at > CACHE_MS) {
-    hit = { at: Date.now(), entries: await find(q) }
-    searches.set(key, hit)
+  let state = searches.get(key)
+  if (!state || Date.now() - state.at > CACHE_MS) {
+    const repo = repoFromQuery(q)
+    const words = wordsFor(q)
+    const term = words.filter((w) => !/^\d/.test(w)).sort((a, b) => b.length - a.length)[0] ?? words[0]
+    const params = new URLSearchParams({ search: term, filter: 'gguf', sort: 'downloads', direction: '-1', limit: '100' })
+    for (const field of ['gguf', 'downloads', 'gated', 'pipeline_tag', 'cardData', 'siblings']) params.append('expand[]', field)
+    state = { at: Date.now(), repo, words, next: `${HUB}/api/models?${params}`, queue: [], pages: [], seen: new Set(), lock: Promise.resolve() }
+    searches.set(key, state)
   }
+  // Serialize pagination of the same query; priority changes reuse discovered entries.
+  const work = state.lock.catch(() => {}).then(async () => {
+    while (state.pages.length <= page) {
+      if (state.repo) {
+        const entry = await toEntry({ id: state.repo })
+        if (!entry) throw new Error('No supported single-file GGUF language model was found in this repository. Search for a GGUF conversion of its name.')
+        state.pages.push({ entries: [entry], hasMore: false })
+        state.repo = null
+        state.next = null
+        continue
+      }
+      const entries = []
+      // Bound each request's work; a page can be empty but still offer Load more.
+      let batches = 0
+      while (entries.length < PAGE_SIZE && (state.queue.length || state.next) && batches++ < 8) {
+        if (!state.queue.length && state.next) {
+          const res = await getResponse(state.next)
+          const hits = await res.json()
+          const next = /<([^>]+)>;\s*rel="next"/.exec(res.headers.get('link') ?? '')?.[1]
+          state.next = next && next.startsWith(`${HUB}/api/models?`) ? next : null
+          state.queue = hits.filter((m) => {
+            if (!REPO_ID.test(m.id ?? '') || NOT_CHAT.has(m.pipeline_tag) || DRAFT.test(m.id)) return false
+            if (m.gated || !m.siblings?.some((s) => quantOf(s.rfilename))) return false
+            const haystack = m.id.toLowerCase()
+            return state.words.every((word) => matchesWord(haystack, word)) && !state.seen.has(m.id)
+          })
+        }
+        const hits = state.queue.splice(0, PAGE_SIZE - entries.length)
+        const results = await mapLimit(hits, 5, async (hit) => {
+          try { return { hit, entry: await toEntry(hit) } }
+          catch (error) { return { hit, error } }
+        })
+        const failed = results.filter((r) => r.error)
+        for (const result of results) {
+          if (result.error) continue
+          state.seen.add(result.hit.id)
+          if (result.entry) entries.push(result.entry)
+        }
+        if (failed.length) {
+          state.queue.unshift(...failed.map((r) => r.hit))
+          if (!entries.length) throw failed[0].error
+          break
+        }
+      }
+      state.pages.push({ entries, hasMore: !!(state.queue.length || state.next) })
+      if (!state.next && !state.queue.length && state.pages.length <= page) break
+    }
+  })
+  state.lock = work
+  await work
   const target = SPEED_TARGETS[priority] ?? SPEED_TARGET
-  return hit.entries.map((entry) => bestPlan(entry, device, target))
+  const result = state.pages[page] ?? { entries: [], hasMore: false }
+  return { results: result.entries.map((e) => bestPlan(e, device, target)), hasMore: result.hasMore }
 }
 
-async function find(q) {
-  const params = new URLSearchParams({ search: q, filter: 'gguf', sort: 'downloads', direction: '-1', limit: '60' })
-  for (const field of ['gguf', 'downloads', 'gated', 'pipeline_tag', 'cardData', 'siblings']) params.append('expand[]', field)
-  const hits = await getJSON(`${HUB}/api/models?${params}`)
-
-  const curated = new Set(CATALOG.map((e) => modelName(e.repo).toLowerCase()))
-  const groups = new Map()
-  for (const m of hits) {
-    // The id becomes a folder on disk (install.cjs), so only a plain org/name will do.
-    if (!REPO_ID.test(m.id ?? '')) continue
-    if (m.gated) continue // can't be downloaded without an account
-    if (!m.gguf?.chat_template || NOT_CHAT.has(m.pipeline_tag) || DRAFT.test(m.id)) continue
-    if (!m.siblings?.some((s) => quantOf(s.rfilename))) continue
-    const name = modelName(m.id, [].concat(m.cardData?.base_model ?? [])[0])
-    const key = name.toLowerCase()
-    // Hits arrive most-downloaded first, so the first repo seen for a model is
-    // the one to offer; the others only add to how popular the model is.
-    const group = groups.get(key)
-    if (group) group.downloads += m.downloads ?? 0
-    else groups.set(key, { key, name, repo: m.id, hit: m, downloads: m.downloads ?? 0 })
-  }
-
-  const ranked = [...groups.values()].sort((a, b) => b.downloads - a.downloads)
-  // Catalog models set the bar too (so "gpt-oss" doesn't fill up with gpt-oss
-  // fine-tunes), but aren't returned: the browser already lists them.
-  const floor = (ranked[0]?.downloads ?? 0) * MIN_SHARE
-  const top = ranked.filter((g) => g.downloads >= floor && !curated.has(g.key)).slice(0, MAX_RESULTS)
-  return (await mapLimit(top, 5, toEntry)).filter(Boolean)
+// Retain the array interface for the terminal picker.
+async function search(query, device, priority) {
+  return (await searchPage(query, device, priority)).results
 }
 
-function round(n) {
-  return Math.round(n * 10) / 10
-}
-
-module.exports = { search, quantOf, modelName }
+module.exports = { search, searchPage, quantOf, modelName, describeRepo, repoFromQuery, matchesWord }

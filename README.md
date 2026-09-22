@@ -38,7 +38,7 @@ API key, nothing to install.
 |---|---|
 | **Built-in AI runtime** | llama.cpp ships inside the app and runs on the GPU. No terminal, no other apps. |
 | **Sized to your Mac** | Jemero reads your chip and memory and marks the best model that fits, already quantized for speed. |
-| **One-click models** | 15 verified coding models, and a search that finds any chat model on Hugging Face (Gemma, Llama, Phi, Qwen…), sized for your Mac the same way. Downloads resume if interrupted and are checked against Hugging Face's SHA-256. |
+| **One-click models** | 43 verified coding and general models, starting at 135M parameters, and a search that finds any chat model on Hugging Face (Gemma, Llama, Phi, Qwen…), sized for your Mac the same way. Downloads resume if interrupted and are checked against Hugging Face's SHA-256. |
 | **Any component** | Components (pickers, inputs, menus), blocks (forms, cards, panels) or full-width sections (heroes, pricing, footers). |
 | **Your UI kit** | shadcn/ui, Headless UI, plain Tailwind, Material UI or Mantine, bundled in the app. Switch kits and Jemero rebuilds the component with the new one. |
 | **Live canvas** | Only the component, rendered offline in milliseconds, with its states side by side, light/dark and phone/tablet/desktop widths. |
@@ -87,13 +87,13 @@ tokens/sec ≈ 0.75 × memory bandwidth ÷ bytes read per token
 The 0.75 is calibrated, not assumed: Qwen2.5-Coder 14B at 4-bit measured 24.5 tok/s on
 an M4 Pro (273 GB/s), and the formula predicts 24.
 
-- **Fit:** weights + KV cache at 16k context + compute buffers must fit the model
+- **Fit:** weights + KV cache at the selected context + compute buffers must fit the model
   budget: unified memory minus ~6 GB for the app, the sandbox and macOS, and at most
   Metal's wired limit minus 1.5 GB.
 - **Speed:** dense models read all their weights per token; a mixture-of-experts reads
   only its active experts, which is why a 30B MoE can outrun a dense 14B.
-- **Quantization:** the best-quality level that still meets the speed target. Nothing
-  below 4-bit is offered.
+- **Quantization:** the best-quality level that fits and balances the speed target. No model
+  is hidden just for being small; Hub search also offers lower-bit and full-precision GGUFs.
 - **Priority** (Settings → Generation): *Speed* wants 35+ tok/s, *Balance* 20+,
   *Quality* accepts down to 10 for a stronger model.
 
@@ -101,13 +101,27 @@ Every size in the catalog is the real byte count of the real file, and every KV 
 comes from the model's own config, so "too big" is a fact, not a guess. Run
 `npm run models` to see the ranking for your own Mac.
 
-**Search** goes beyond the catalog: type a name (`gemma 1b`, `llama 3b`, `phi 4`) and
-Jemero asks Hugging Face for GGUF chat models, folds the many uploads of one model into a
-single row, and sizes each for your Mac with the same rules. Nothing is guessed there
-either: file sizes and checksums come from the Hub, and layers, KV heads, sliding-window
-layout and context length are read from the GGUF header itself (a few KB, fetched with a
-range request). A model with less than the 16k context this app needs is shown, but
-marked as such. `npm run models -- --search "gemma 1b"` does the same from a terminal.
+**Models** opens on the full catalog, with models that exceed this Mac’s memory or
+runtime capabilities disabled. Filter by parameter count (including 1B or smaller),
+or sort smallest first. Gemma 270M/1B, SmolLM2 135M/360M, Qwen, Llama, Phi and others
+are available immediately, without a search.
+
+**Search** goes beyond the catalog: type a name (`gemma 1b`, `llama 3b`, `phi 4`),
+a Hugging Face repository ID, or its URL. Results are paginated with **Load more**;
+there is no popularity cutoff. Each public single-file GGUF is sized using its actual
+file size and GGUF metadata. Subfolders are supported. Gated repositories require
+access approval and are not currently downloadable in-app; split GGUFs and non-language
+models are excluded. Unknown runtime architectures remain disabled.
+
+Context defaults to 16k and reduces when needed, down to 512 tokens. Shorter native
+windows (such as SmolLM2’s 8k and TinyLlama’s 2k) are usable. Before generation, the app
+counts the formatted prompt with the running model’s tokenizer and caps the answer to
+available context; an oversized prompt gets an actionable error. Fit and speed are
+estimates, not a guarantee that every community upload will load or produce good code.
+
+`npm run models -- --search "gemma 1b"` also searches from a terminal.
+`node scripts/refresh-small-catalog.mjs` refreshes the bundled small-model metadata
+from Hugging Face without downloading weights.
 
 </details>
 
@@ -289,7 +303,7 @@ To release: bump `version` in `package.json`, then
 
 ```bash
 npm run dist
-gh release create v0.2.0 release/Jemero-arm64.dmg --title "Jemero 0.2.0"
+gh release create v0.4.0 release/Jemero-arm64.dmg --title "Jemero 0.4.0"
 ```
 
 The DMG name has no version in it, so the download link

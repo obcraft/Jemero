@@ -1,0 +1,1690 @@
+[
+  {
+    "id": "small:unsloth/gemma-3-270m-it-GGUF",
+    "source": "catalog",
+    "label": "Gemma 3 270M",
+    "repo": "unsloth/gemma-3-270m-it-GGUF",
+    "params": 0.268,
+    "codingScore": 25,
+    "qat": false,
+    "kvKiBPerToken": 3.9375,
+    "kvMetadata": {
+      "general.architecture": "gemma3",
+      "gemma3.context_length": 32768,
+      "gemma3.embedding_length": 640,
+      "gemma3.block_count": 18,
+      "gemma3.feed_forward_length": 2048,
+      "gemma3.attention.head_count": 4,
+      "gemma3.attention.layer_norm_rms_epsilon": 9.999999974752427e-7,
+      "gemma3.attention.key_length": 256,
+      "gemma3.attention.value_length": 256,
+      "gemma3.rope.freq_base": 1000000,
+      "gemma3.attention.sliding_window": 512,
+      "gemma3.attention.head_count_kv": 1
+    },
+    "maxCtx": 32768,
+    "unsupportedReason": null,
+    "tags": [
+      "gemma3",
+      "tiny",
+      "general"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "F16",
+        "file": "gemma-3-270m-it-F16.gguf",
+        "bytes": 542835488
+      },
+      {
+        "tag": "Q4_0",
+        "file": "gemma-3-270m-it-Q4_0.gguf",
+        "bytes": 241574944
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "gemma-3-270m-it-Q4_K_M.gguf",
+        "bytes": 253115424
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "gemma-3-270m-it-Q5_K_M.gguf",
+        "bytes": 260027424
+      },
+      {
+        "tag": "Q6_K",
+        "file": "gemma-3-270m-it-Q6_K.gguf",
+        "bytes": 282975264
+      },
+      {
+        "tag": "Q8_0",
+        "file": "gemma-3-270m-it-Q8_0.gguf",
+        "bytes": 291546144
+      }
+    ]
+  },
+  {
+    "id": "small:unsloth/gemma-3-1b-it-GGUF",
+    "source": "catalog",
+    "label": "Gemma 3 1B",
+    "repo": "unsloth/gemma-3-1b-it-GGUF",
+    "params": 1,
+    "codingScore": 42,
+    "qat": false,
+    "kvKiBPerToken": 5.375,
+    "kvMetadata": {
+      "general.architecture": "gemma3",
+      "gemma3.context_length": 32768,
+      "gemma3.embedding_length": 1152,
+      "gemma3.block_count": 26,
+      "gemma3.feed_forward_length": 6912,
+      "gemma3.attention.head_count": 4,
+      "gemma3.attention.layer_norm_rms_epsilon": 9.999999974752427e-7,
+      "gemma3.attention.key_length": 256,
+      "gemma3.attention.value_length": 256,
+      "gemma3.rope.freq_base": 1000000,
+      "gemma3.attention.sliding_window": 512,
+      "gemma3.attention.head_count_kv": 1
+    },
+    "maxCtx": 32768,
+    "unsupportedReason": null,
+    "tags": [
+      "gemma3",
+      "tiny",
+      "general"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "BF16",
+        "file": "gemma-3-1b-it-BF16.gguf",
+        "bytes": 2006573344
+      },
+      {
+        "tag": "Q4_0",
+        "file": "gemma-3-1b-it-Q4_0.gguf",
+        "bytes": 721918496
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "gemma-3-1b-it-Q4_K_M.gguf",
+        "bytes": 806058272
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "gemma-3-1b-it-Q5_K_M.gguf",
+        "bytes": 851345696
+      },
+      {
+        "tag": "Q6_K",
+        "file": "gemma-3-1b-it-Q6_K.gguf",
+        "bytes": 1011738656
+      },
+      {
+        "tag": "Q8_0",
+        "file": "gemma-3-1b-it-Q8_0.gguf",
+        "bytes": 1069306400
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/gemma-2-2b-it-GGUF",
+    "source": "catalog",
+    "label": "Gemma 2 2B",
+    "repo": "bartowski/gemma-2-2b-it-GGUF",
+    "params": 2.614,
+    "codingScore": 50,
+    "qat": false,
+    "kvKiBPerToken": 66.625,
+    "kvMetadata": {
+      "general.architecture": "gemma2",
+      "gemma2.context_length": 8192,
+      "gemma2.embedding_length": 2304,
+      "gemma2.block_count": 26,
+      "gemma2.feed_forward_length": 9216,
+      "gemma2.attention.head_count": 8,
+      "gemma2.attention.head_count_kv": 4,
+      "gemma2.attention.layer_norm_rms_epsilon": 9.999999974752427e-7,
+      "gemma2.attention.key_length": 256,
+      "gemma2.attention.value_length": 256,
+      "gemma2.attn_logit_softcapping": 50,
+      "gemma2.final_logit_softcapping": 30,
+      "gemma2.attention.sliding_window": 4096
+    },
+    "maxCtx": 8192,
+    "unsupportedReason": null,
+    "tags": [
+      "gemma2",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "Q4_K_M",
+        "file": "gemma-2-2b-it-Q4_K_M.gguf",
+        "bytes": 1708582752
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "gemma-2-2b-it-Q5_K_M.gguf",
+        "bytes": 1923278688
+      },
+      {
+        "tag": "Q6_K",
+        "file": "gemma-2-2b-it-Q6_K.gguf",
+        "bytes": 2151393120
+      },
+      {
+        "tag": "Q8_0",
+        "file": "gemma-2-2b-it-Q8_0.gguf",
+        "bytes": 2784495456
+      }
+    ]
+  },
+  {
+    "id": "small:unsloth/gemma-3-4b-it-GGUF",
+    "source": "catalog",
+    "label": "Gemma 3 4B",
+    "repo": "unsloth/gemma-3-4b-it-GGUF",
+    "params": 3.88,
+    "codingScore": 62,
+    "qat": false,
+    "kvKiBPerToken": 30.875,
+    "kvMetadata": {
+      "general.architecture": "gemma3",
+      "gemma3.context_length": 131072,
+      "gemma3.embedding_length": 2560,
+      "gemma3.block_count": 34,
+      "gemma3.feed_forward_length": 10240,
+      "gemma3.attention.head_count": 8,
+      "gemma3.attention.layer_norm_rms_epsilon": 9.999999974752427e-7,
+      "gemma3.attention.key_length": 256,
+      "gemma3.attention.value_length": 256,
+      "gemma3.rope.freq_base": 1000000,
+      "gemma3.attention.sliding_window": 1024,
+      "gemma3.attention.head_count_kv": 4,
+      "gemma3.rope.scaling.type": "linear",
+      "gemma3.rope.scaling.factor": 8
+    },
+    "maxCtx": 131072,
+    "unsupportedReason": null,
+    "tags": [
+      "gemma3",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "BF16",
+        "file": "gemma-3-4b-it-BF16.gguf",
+        "bytes": 7767803520
+      },
+      {
+        "tag": "Q4_0",
+        "file": "gemma-3-4b-it-Q4_0.gguf",
+        "bytes": 2370065536
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "gemma-3-4b-it-Q4_K_M.gguf",
+        "bytes": 2489894016
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "gemma-3-4b-it-Q5_K_M.gguf",
+        "bytes": 2829698176
+      },
+      {
+        "tag": "Q6_K",
+        "file": "gemma-3-4b-it-Q6_K.gguf",
+        "bytes": 3190740096
+      },
+      {
+        "tag": "Q8_0",
+        "file": "gemma-3-4b-it-Q8_0.gguf",
+        "bytes": 4130402176
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/SmolLM2-135M-Instruct-GGUF",
+    "source": "catalog",
+    "label": "SmolLM2 135M",
+    "repo": "bartowski/SmolLM2-135M-Instruct-GGUF",
+    "params": 0.135,
+    "codingScore": 18,
+    "qat": false,
+    "kvKiBPerToken": 22.5,
+    "kvMetadata": {
+      "general.architecture": "llama",
+      "llama.block_count": 30,
+      "llama.context_length": 8192,
+      "llama.embedding_length": 576,
+      "llama.feed_forward_length": 1536,
+      "llama.attention.head_count": 9,
+      "llama.attention.head_count_kv": 3,
+      "llama.rope.freq_base": 100000,
+      "llama.attention.layer_norm_rms_epsilon": 0.000009999999747378752,
+      "llama.vocab_size": 49152,
+      "llama.rope.dimension_count": 64
+    },
+    "maxCtx": 8192,
+    "unsupportedReason": null,
+    "tags": [
+      "llama",
+      "tiny",
+      "general"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "SmolLM2-135M-Instruct-Q4_0.gguf",
+        "bytes": 91893088
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "SmolLM2-135M-Instruct-Q4_K_M.gguf",
+        "bytes": 105454432
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "SmolLM2-135M-Instruct-Q5_K_M.gguf",
+        "bytes": 112103776
+      },
+      {
+        "tag": "Q6_K",
+        "file": "SmolLM2-135M-Instruct-Q6_K.gguf",
+        "bytes": 138383200
+      },
+      {
+        "tag": "Q8_0",
+        "file": "SmolLM2-135M-Instruct-Q8_0.gguf",
+        "bytes": 144811360
+      },
+      {
+        "tag": "F16",
+        "file": "SmolLM2-135M-Instruct-f16.gguf",
+        "bytes": 270885952
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/SmolLM2-360M-Instruct-GGUF",
+    "source": "catalog",
+    "label": "SmolLM2 360M",
+    "repo": "bartowski/SmolLM2-360M-Instruct-GGUF",
+    "params": 0.362,
+    "codingScore": 24,
+    "qat": false,
+    "kvKiBPerToken": 40,
+    "kvMetadata": {
+      "general.architecture": "llama",
+      "llama.block_count": 32,
+      "llama.context_length": 8192,
+      "llama.embedding_length": 960,
+      "llama.feed_forward_length": 2560,
+      "llama.attention.head_count": 15,
+      "llama.attention.head_count_kv": 5,
+      "llama.rope.freq_base": 100000,
+      "llama.attention.layer_norm_rms_epsilon": 0.000009999999747378752,
+      "llama.vocab_size": 49152,
+      "llama.rope.dimension_count": 64
+    },
+    "maxCtx": 8192,
+    "unsupportedReason": null,
+    "tags": [
+      "llama",
+      "tiny",
+      "general"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "SmolLM2-360M-Instruct-Q4_0.gguf",
+        "bytes": 229733280
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "SmolLM2-360M-Instruct-Q4_K_M.gguf",
+        "bytes": 270590880
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "SmolLM2-360M-Instruct-Q5_K_M.gguf",
+        "bytes": 289944480
+      },
+      {
+        "tag": "Q6_K",
+        "file": "SmolLM2-360M-Instruct-Q6_K.gguf",
+        "bytes": 367358880
+      },
+      {
+        "tag": "Q8_0",
+        "file": "SmolLM2-360M-Instruct-Q8_0.gguf",
+        "bytes": 386405280
+      },
+      {
+        "tag": "F16",
+        "file": "SmolLM2-360M-Instruct-f16.gguf",
+        "bytes": 725553792
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/SmolLM2-1.7B-Instruct-GGUF",
+    "source": "catalog",
+    "label": "SmolLM2 1.7B",
+    "repo": "bartowski/SmolLM2-1.7B-Instruct-GGUF",
+    "params": 1.711,
+    "codingScore": 40,
+    "qat": false,
+    "kvKiBPerToken": 192,
+    "kvMetadata": {
+      "general.architecture": "llama",
+      "llama.block_count": 24,
+      "llama.context_length": 8192,
+      "llama.embedding_length": 2048,
+      "llama.feed_forward_length": 8192,
+      "llama.attention.head_count": 32,
+      "llama.attention.head_count_kv": 32,
+      "llama.rope.freq_base": 130000,
+      "llama.attention.layer_norm_rms_epsilon": 0.000009999999747378752,
+      "llama.vocab_size": 49152,
+      "llama.rope.dimension_count": 64
+    },
+    "maxCtx": 8192,
+    "unsupportedReason": null,
+    "tags": [
+      "llama",
+      "general"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "SmolLM2-1.7B-Instruct-Q4_0.gguf",
+        "bytes": 993874912
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "SmolLM2-1.7B-Instruct-Q4_K_M.gguf",
+        "bytes": 1055609824
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "SmolLM2-1.7B-Instruct-Q5_K_M.gguf",
+        "bytes": 1225479136
+      },
+      {
+        "tag": "Q6_K",
+        "file": "SmolLM2-1.7B-Instruct-Q6_K.gguf",
+        "bytes": 1405965280
+      },
+      {
+        "tag": "Q8_0",
+        "file": "SmolLM2-1.7B-Instruct-Q8_0.gguf",
+        "bytes": 1820414944
+      },
+      {
+        "tag": "F16",
+        "file": "SmolLM2-1.7B-Instruct-f16.gguf",
+        "bytes": 3424735936
+      }
+    ]
+  },
+  {
+    "id": "small:unsloth/SmolLM3-3B-GGUF",
+    "source": "catalog",
+    "label": "SmolLM3 3B",
+    "repo": "unsloth/SmolLM3-3B-GGUF",
+    "params": 3.075,
+    "codingScore": 55,
+    "qat": false,
+    "kvKiBPerToken": 72,
+    "kvMetadata": {
+      "general.architecture": "smollm3",
+      "smollm3.block_count": 36,
+      "smollm3.context_length": 65536,
+      "smollm3.embedding_length": 2048,
+      "smollm3.feed_forward_length": 11008,
+      "smollm3.attention.head_count": 16,
+      "smollm3.attention.head_count_kv": 4,
+      "smollm3.rope.freq_base": 5000000,
+      "smollm3.attention.layer_norm_rms_epsilon": 9.999999974752427e-7,
+      "smollm3.vocab_size": 128256,
+      "smollm3.rope.dimension_count": 128
+    },
+    "maxCtx": 65536,
+    "unsupportedReason": null,
+    "tags": [
+      "smollm3",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "BF16",
+        "file": "SmolLM3-3B-BF16.gguf",
+        "bytes": 6158340416
+      },
+      {
+        "tag": "Q4_0",
+        "file": "SmolLM3-3B-Q4_0.gguf",
+        "bytes": 1811456544
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "SmolLM3-3B-Q4_K_M.gguf",
+        "bytes": 1915306528
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "SmolLM3-3B-Q5_K_M.gguf",
+        "bytes": 2213757472
+      },
+      {
+        "tag": "Q6_K",
+        "file": "SmolLM3-3B-Q6_K.gguf",
+        "bytes": 2530861600
+      },
+      {
+        "tag": "Q8_0",
+        "file": "SmolLM3-3B-Q8_0.gguf",
+        "bytes": 3275575840
+      }
+    ]
+  },
+  {
+    "id": "small:Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+    "source": "catalog",
+    "label": "Qwen2.5 0.5B",
+    "repo": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+    "params": 0.63,
+    "codingScore": 30,
+    "qat": false,
+    "kvKiBPerToken": 12,
+    "kvMetadata": {
+      "general.architecture": "qwen2",
+      "qwen2.block_count": 24,
+      "qwen2.context_length": 32768,
+      "qwen2.embedding_length": 896,
+      "qwen2.feed_forward_length": 4864,
+      "qwen2.attention.head_count": 14,
+      "qwen2.attention.head_count_kv": 2,
+      "qwen2.rope.freq_base": 1000000,
+      "qwen2.attention.layer_norm_rms_epsilon": 9.999999974752427e-7
+    },
+    "maxCtx": 32768,
+    "unsupportedReason": null,
+    "tags": [
+      "qwen2",
+      "tiny",
+      "general"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "qwen2.5-0.5b-instruct-q4_0.gguf",
+        "bytes": 428730208
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+        "bytes": 491400032
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "qwen2.5-0.5b-instruct-q5_k_m.gguf",
+        "bytes": 522186592
+      },
+      {
+        "tag": "Q6_K",
+        "file": "qwen2.5-0.5b-instruct-q6_k.gguf",
+        "bytes": 650379104
+      },
+      {
+        "tag": "Q8_0",
+        "file": "qwen2.5-0.5b-instruct-q8_0.gguf",
+        "bytes": 675710816
+      }
+    ]
+  },
+  {
+    "id": "small:Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+    "source": "catalog",
+    "label": "Qwen2.5 1.5B",
+    "repo": "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
+    "params": 1.777,
+    "codingScore": 42,
+    "qat": false,
+    "kvKiBPerToken": 28,
+    "kvMetadata": {
+      "general.architecture": "qwen2",
+      "qwen2.block_count": 28,
+      "qwen2.context_length": 32768,
+      "qwen2.embedding_length": 1536,
+      "qwen2.feed_forward_length": 8960,
+      "qwen2.attention.head_count": 12,
+      "qwen2.attention.head_count_kv": 2,
+      "qwen2.rope.freq_base": 1000000,
+      "qwen2.attention.layer_norm_rms_epsilon": 9.999999974752427e-7
+    },
+    "maxCtx": 32768,
+    "unsupportedReason": null,
+    "tags": [
+      "qwen2",
+      "general"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "qwen2.5-1.5b-instruct-q4_0.gguf",
+        "bytes": 1066227232
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+        "bytes": 1117320736
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "qwen2.5-1.5b-instruct-q5_k_m.gguf",
+        "bytes": 1285494304
+      },
+      {
+        "tag": "Q6_K",
+        "file": "qwen2.5-1.5b-instruct-q6_k.gguf",
+        "bytes": 1464178720
+      },
+      {
+        "tag": "Q8_0",
+        "file": "qwen2.5-1.5b-instruct-q8_0.gguf",
+        "bytes": 1894532128
+      }
+    ]
+  },
+  {
+    "id": "small:Qwen/Qwen2.5-3B-Instruct-GGUF",
+    "source": "catalog",
+    "label": "Qwen2.5 3B",
+    "repo": "Qwen/Qwen2.5-3B-Instruct-GGUF",
+    "params": 3.397,
+    "codingScore": 54,
+    "qat": false,
+    "kvKiBPerToken": 36,
+    "kvMetadata": {
+      "general.architecture": "qwen2",
+      "qwen2.block_count": 36,
+      "qwen2.context_length": 32768,
+      "qwen2.embedding_length": 2048,
+      "qwen2.feed_forward_length": 11008,
+      "qwen2.attention.head_count": 16,
+      "qwen2.attention.head_count_kv": 2,
+      "qwen2.rope.freq_base": 1000000,
+      "qwen2.attention.layer_norm_rms_epsilon": 9.999999974752427e-7
+    },
+    "maxCtx": 32768,
+    "unsupportedReason": null,
+    "tags": [
+      "qwen2",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "qwen2.5-3b-instruct-q4_0.gguf",
+        "bytes": 1997879712
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "qwen2.5-3b-instruct-q4_k_m.gguf",
+        "bytes": 2104932768
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "qwen2.5-3b-instruct-q5_k_m.gguf",
+        "bytes": 2438740384
+      },
+      {
+        "tag": "Q6_K",
+        "file": "qwen2.5-3b-instruct-q6_k.gguf",
+        "bytes": 2793410976
+      },
+      {
+        "tag": "Q8_0",
+        "file": "qwen2.5-3b-instruct-q8_0.gguf",
+        "bytes": 3616088480
+      }
+    ]
+  },
+  {
+    "id": "small:Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF",
+    "source": "catalog",
+    "label": "Qwen2.5-Coder 0.5B",
+    "repo": "Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF",
+    "params": 0.63,
+    "codingScore": 35,
+    "qat": false,
+    "kvKiBPerToken": 12,
+    "kvMetadata": {
+      "general.architecture": "qwen2",
+      "qwen2.block_count": 24,
+      "qwen2.context_length": 32768,
+      "qwen2.embedding_length": 896,
+      "qwen2.feed_forward_length": 4864,
+      "qwen2.attention.head_count": 14,
+      "qwen2.attention.head_count_kv": 2,
+      "qwen2.rope.freq_base": 1000000,
+      "qwen2.attention.layer_norm_rms_epsilon": 9.999999974752427e-7
+    },
+    "maxCtx": 32768,
+    "unsupportedReason": null,
+    "tags": [
+      "qwen2",
+      "tiny",
+      "coder"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "qwen2.5-coder-0.5b-instruct-q4_0.gguf",
+        "bytes": 428730240
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "qwen2.5-coder-0.5b-instruct-q4_k_m.gguf",
+        "bytes": 491400064
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "qwen2.5-coder-0.5b-instruct-q5_k_m.gguf",
+        "bytes": 522186624
+      },
+      {
+        "tag": "Q6_K",
+        "file": "qwen2.5-coder-0.5b-instruct-q6_k.gguf",
+        "bytes": 650379136
+      },
+      {
+        "tag": "Q8_0",
+        "file": "qwen2.5-coder-0.5b-instruct-q8_0.gguf",
+        "bytes": 675710848
+      }
+    ]
+  },
+  {
+    "id": "small:unsloth/Qwen3-0.6B-GGUF",
+    "source": "catalog",
+    "label": "Qwen3 0.6B",
+    "repo": "unsloth/Qwen3-0.6B-GGUF",
+    "params": 0.596,
+    "codingScore": 34,
+    "qat": false,
+    "kvKiBPerToken": 112,
+    "kvMetadata": {
+      "general.architecture": "qwen3",
+      "qwen3.block_count": 28,
+      "qwen3.context_length": 40960,
+      "qwen3.embedding_length": 1024,
+      "qwen3.feed_forward_length": 3072,
+      "qwen3.attention.head_count": 16,
+      "qwen3.attention.head_count_kv": 8,
+      "qwen3.rope.freq_base": 1000000,
+      "qwen3.attention.layer_norm_rms_epsilon": 9.999999974752427e-7,
+      "qwen3.attention.key_length": 128,
+      "qwen3.attention.value_length": 128
+    },
+    "maxCtx": 40960,
+    "unsupportedReason": null,
+    "tags": [
+      "qwen3",
+      "tiny",
+      "general"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "BF16",
+        "file": "Qwen3-0.6B-BF16.gguf",
+        "bytes": 1198182848
+      },
+      {
+        "tag": "Q4_0",
+        "file": "Qwen3-0.6B-Q4_0.gguf",
+        "bytes": 382156480
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "Qwen3-0.6B-Q4_K_M.gguf",
+        "bytes": 396705472
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "Qwen3-0.6B-Q5_K_M.gguf",
+        "bytes": 444415680
+      },
+      {
+        "tag": "Q6_K",
+        "file": "Qwen3-0.6B-Q6_K.gguf",
+        "bytes": 495107776
+      },
+      {
+        "tag": "Q8_0",
+        "file": "Qwen3-0.6B-Q8_0.gguf",
+        "bytes": 639447744
+      }
+    ]
+  },
+  {
+    "id": "small:unsloth/Qwen3-1.7B-GGUF",
+    "source": "catalog",
+    "label": "Qwen3 1.7B",
+    "repo": "unsloth/Qwen3-1.7B-GGUF",
+    "params": 1.721,
+    "codingScore": 48,
+    "qat": false,
+    "kvKiBPerToken": 112,
+    "kvMetadata": {
+      "general.architecture": "qwen3",
+      "qwen3.block_count": 28,
+      "qwen3.context_length": 40960,
+      "qwen3.embedding_length": 2048,
+      "qwen3.feed_forward_length": 6144,
+      "qwen3.attention.head_count": 16,
+      "qwen3.attention.head_count_kv": 8,
+      "qwen3.rope.freq_base": 1000000,
+      "qwen3.attention.layer_norm_rms_epsilon": 9.999999974752427e-7,
+      "qwen3.attention.key_length": 128,
+      "qwen3.attention.value_length": 128
+    },
+    "maxCtx": 40960,
+    "unsupportedReason": null,
+    "tags": [
+      "qwen3",
+      "general"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "BF16",
+        "file": "Qwen3-1.7B-BF16.gguf",
+        "bytes": 3447349568
+      },
+      {
+        "tag": "Q4_0",
+        "file": "Qwen3-1.7B-Q4_0.gguf",
+        "bytes": 1056782912
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "Qwen3-1.7B-Q4_K_M.gguf",
+        "bytes": 1107409472
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "Qwen3-1.7B-Q5_K_M.gguf",
+        "bytes": 1257880128
+      },
+      {
+        "tag": "Q6_K",
+        "file": "Qwen3-1.7B-Q6_K.gguf",
+        "bytes": 1417755200
+      },
+      {
+        "tag": "Q8_0",
+        "file": "Qwen3-1.7B-Q8_0.gguf",
+        "bytes": 1834426944
+      }
+    ]
+  },
+  {
+    "id": "small:unsloth/Qwen3-4B-GGUF",
+    "source": "catalog",
+    "label": "Qwen3 4B",
+    "repo": "unsloth/Qwen3-4B-GGUF",
+    "params": 4.022,
+    "codingScore": 62,
+    "qat": false,
+    "kvKiBPerToken": 144,
+    "kvMetadata": {
+      "general.architecture": "qwen3",
+      "qwen3.block_count": 36,
+      "qwen3.context_length": 40960,
+      "qwen3.embedding_length": 2560,
+      "qwen3.feed_forward_length": 9728,
+      "qwen3.attention.head_count": 32,
+      "qwen3.attention.head_count_kv": 8,
+      "qwen3.rope.freq_base": 1000000,
+      "qwen3.attention.layer_norm_rms_epsilon": 9.999999974752427e-7,
+      "qwen3.attention.key_length": 128,
+      "qwen3.attention.value_length": 128
+    },
+    "maxCtx": 40960,
+    "unsupportedReason": null,
+    "tags": [
+      "qwen3",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "BF16",
+        "file": "Qwen3-4B-BF16.gguf",
+        "bytes": 8051285536
+      },
+      {
+        "tag": "Q4_0",
+        "file": "Qwen3-4B-Q4_0.gguf",
+        "bytes": 2375773472
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "Qwen3-4B-Q4_K_M.gguf",
+        "bytes": 2497281312
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "Qwen3-4B-Q5_K_M.gguf",
+        "bytes": 2889514272
+      },
+      {
+        "tag": "Q6_K",
+        "file": "Qwen3-4B-Q6_K.gguf",
+        "bytes": 3306261792
+      },
+      {
+        "tag": "Q8_0",
+        "file": "Qwen3-4B-Q8_0.gguf",
+        "bytes": 4280405792
+      }
+    ]
+  },
+  {
+    "id": "small:unsloth/Qwen3-8B-GGUF",
+    "source": "catalog",
+    "label": "Qwen3 8B",
+    "repo": "unsloth/Qwen3-8B-GGUF",
+    "params": 8.191,
+    "codingScore": 72,
+    "qat": false,
+    "kvKiBPerToken": 144,
+    "kvMetadata": {
+      "general.architecture": "qwen3",
+      "qwen3.block_count": 36,
+      "qwen3.context_length": 40960,
+      "qwen3.embedding_length": 4096,
+      "qwen3.feed_forward_length": 12288,
+      "qwen3.attention.head_count": 32,
+      "qwen3.attention.head_count_kv": 8,
+      "qwen3.rope.freq_base": 1000000,
+      "qwen3.attention.layer_norm_rms_epsilon": 9.999999974752427e-7,
+      "qwen3.attention.key_length": 128,
+      "qwen3.attention.value_length": 128
+    },
+    "maxCtx": 40960,
+    "unsupportedReason": null,
+    "tags": [
+      "qwen3",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "BF16",
+        "file": "Qwen3-8B-BF16.gguf",
+        "bytes": 16388044384
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "Qwen3-8B-Q4_K_M.gguf",
+        "bytes": 5027784512
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "Qwen3-8B-Q5_K_M.gguf",
+        "bytes": 5851113280
+      },
+      {
+        "tag": "Q6_K",
+        "file": "Qwen3-8B-Q6_K.gguf",
+        "bytes": 6725900096
+      },
+      {
+        "tag": "Q8_0",
+        "file": "Qwen3-8B-Q8_0.gguf",
+        "bytes": 8709519168
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/Llama-3.2-1B-Instruct-GGUF",
+    "source": "catalog",
+    "label": "Llama 3.2 1B",
+    "repo": "bartowski/Llama-3.2-1B-Instruct-GGUF",
+    "params": 1.236,
+    "codingScore": 36,
+    "qat": false,
+    "kvKiBPerToken": 32,
+    "kvMetadata": {
+      "general.architecture": "llama",
+      "llama.block_count": 16,
+      "llama.context_length": 131072,
+      "llama.embedding_length": 2048,
+      "llama.feed_forward_length": 8192,
+      "llama.attention.head_count": 32,
+      "llama.attention.head_count_kv": 8,
+      "llama.rope.freq_base": 500000,
+      "llama.attention.layer_norm_rms_epsilon": 0.000009999999747378752,
+      "llama.attention.key_length": 64,
+      "llama.attention.value_length": 64,
+      "llama.vocab_size": 128256,
+      "llama.rope.dimension_count": 64
+    },
+    "maxCtx": 131072,
+    "unsupportedReason": null,
+    "tags": [
+      "llama",
+      "general"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "Llama-3.2-1B-Instruct-Q4_0.gguf",
+        "bytes": 773025920
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
+        "bytes": 807694464
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "Llama-3.2-1B-Instruct-Q5_K_M.gguf",
+        "bytes": 911503488
+      },
+      {
+        "tag": "Q6_K",
+        "file": "Llama-3.2-1B-Instruct-Q6_K.gguf",
+        "bytes": 1021800576
+      },
+      {
+        "tag": "Q8_0",
+        "file": "Llama-3.2-1B-Instruct-Q8_0.gguf",
+        "bytes": 1321083008
+      },
+      {
+        "tag": "F16",
+        "file": "Llama-3.2-1B-Instruct-f16.gguf",
+        "bytes": 2479595360
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/Llama-3.2-3B-Instruct-GGUF",
+    "source": "catalog",
+    "label": "Llama 3.2 3B",
+    "repo": "bartowski/Llama-3.2-3B-Instruct-GGUF",
+    "params": 3.213,
+    "codingScore": 53,
+    "qat": false,
+    "kvKiBPerToken": 112,
+    "kvMetadata": {
+      "general.architecture": "llama",
+      "llama.block_count": 28,
+      "llama.context_length": 131072,
+      "llama.embedding_length": 3072,
+      "llama.feed_forward_length": 8192,
+      "llama.attention.head_count": 24,
+      "llama.attention.head_count_kv": 8,
+      "llama.rope.freq_base": 500000,
+      "llama.attention.layer_norm_rms_epsilon": 0.000009999999747378752,
+      "llama.attention.key_length": 128,
+      "llama.attention.value_length": 128,
+      "llama.vocab_size": 128256,
+      "llama.rope.dimension_count": 128
+    },
+    "maxCtx": 131072,
+    "unsupportedReason": null,
+    "tags": [
+      "llama",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "Llama-3.2-3B-Instruct-Q4_0.gguf",
+        "bytes": 1921909280
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+        "bytes": 2019377696
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "Llama-3.2-3B-Instruct-Q5_K_M.gguf",
+        "bytes": 2322154016
+      },
+      {
+        "tag": "Q6_K",
+        "file": "Llama-3.2-3B-Instruct-Q6_K.gguf",
+        "bytes": 2643853856
+      },
+      {
+        "tag": "Q8_0",
+        "file": "Llama-3.2-3B-Instruct-Q8_0.gguf",
+        "bytes": 3421899296
+      },
+      {
+        "tag": "F16",
+        "file": "Llama-3.2-3B-Instruct-f16.gguf",
+        "bytes": 6433687840
+      }
+    ]
+  },
+  {
+    "id": "small:TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
+    "source": "catalog",
+    "label": "TinyLlama 1.1B",
+    "repo": "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
+    "params": 1.1,
+    "codingScore": 25,
+    "qat": false,
+    "kvKiBPerToken": 22,
+    "kvMetadata": {
+      "general.architecture": "llama",
+      "llama.context_length": 2048,
+      "llama.embedding_length": 2048,
+      "llama.block_count": 22,
+      "llama.feed_forward_length": 5632,
+      "llama.rope.dimension_count": 64,
+      "llama.attention.head_count": 32,
+      "llama.attention.head_count_kv": 4,
+      "llama.attention.layer_norm_rms_epsilon": 0.000009999999747378752,
+      "llama.rope.freq_base": 10000
+    },
+    "maxCtx": 2048,
+    "unsupportedReason": null,
+    "tags": [
+      "llama",
+      "general"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "tinyllama-1.1b-chat-v1.0.Q4_0.gguf",
+        "bytes": 637699456
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+        "bytes": 668788096
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "tinyllama-1.1b-chat-v1.0.Q5_K_M.gguf",
+        "bytes": 783017344
+      },
+      {
+        "tag": "Q6_K",
+        "file": "tinyllama-1.1b-chat-v1.0.Q6_K.gguf",
+        "bytes": 904385920
+      },
+      {
+        "tag": "Q8_0",
+        "file": "tinyllama-1.1b-chat-v1.0.Q8_0.gguf",
+        "bytes": 1170781568
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/Phi-3-mini-4k-instruct-GGUF",
+    "source": "catalog",
+    "label": "Phi-3 Mini 3.8B",
+    "repo": "bartowski/Phi-3-mini-4k-instruct-GGUF",
+    "params": 3.821,
+    "codingScore": 54,
+    "qat": false,
+    "kvKiBPerToken": 384,
+    "kvMetadata": {
+      "general.architecture": "phi3",
+      "phi3.context_length": 4096,
+      "phi3.embedding_length": 3072,
+      "phi3.feed_forward_length": 8192,
+      "phi3.block_count": 32,
+      "phi3.attention.head_count": 32,
+      "phi3.attention.head_count_kv": 32,
+      "phi3.attention.layer_norm_rms_epsilon": 0.000009999999747378752,
+      "phi3.rope.dimension_count": 96
+    },
+    "maxCtx": 4096,
+    "unsupportedReason": null,
+    "tags": [
+      "phi3",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "Q4_K_M",
+        "file": "Phi-3-mini-4k-instruct-Q4_K_M.gguf",
+        "bytes": 2393231360
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "Phi-3-mini-4k-instruct-Q5_K_M.gguf",
+        "bytes": 2815275008
+      },
+      {
+        "tag": "Q6_K",
+        "file": "Phi-3-mini-4k-instruct-Q6_K.gguf",
+        "bytes": 3135852032
+      },
+      {
+        "tag": "Q8_0",
+        "file": "Phi-3-mini-4k-instruct-Q8_0.gguf",
+        "bytes": 4061221376
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/Phi-3.5-mini-instruct-GGUF",
+    "source": "catalog",
+    "label": "Phi-3.5 Mini 3.8B",
+    "repo": "bartowski/Phi-3.5-mini-instruct-GGUF",
+    "params": 3.821,
+    "codingScore": 60,
+    "qat": false,
+    "kvKiBPerToken": 384,
+    "kvMetadata": {
+      "general.architecture": "phi3",
+      "phi3.context_length": 131072,
+      "phi3.rope.scaling.original_context_length": 4096,
+      "phi3.embedding_length": 3072,
+      "phi3.feed_forward_length": 8192,
+      "phi3.block_count": 32,
+      "phi3.attention.head_count": 32,
+      "phi3.attention.head_count_kv": 32,
+      "phi3.attention.layer_norm_rms_epsilon": 0.000009999999747378752,
+      "phi3.rope.dimension_count": 96,
+      "phi3.rope.freq_base": 10000,
+      "phi3.attention.sliding_window": 262144,
+      "phi3.rope.scaling.attn_factor": 1.190238118171692
+    },
+    "maxCtx": 131072,
+    "unsupportedReason": null,
+    "tags": [
+      "phi3",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "Phi-3.5-mini-instruct-Q4_0.gguf",
+        "bytes": 2182468896
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "Phi-3.5-mini-instruct-Q4_K_M.gguf",
+        "bytes": 2393232672
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "Phi-3.5-mini-instruct-Q5_K_M.gguf",
+        "bytes": 2815276320
+      },
+      {
+        "tag": "Q6_K",
+        "file": "Phi-3.5-mini-instruct-Q6_K.gguf",
+        "bytes": 3135853344
+      },
+      {
+        "tag": "Q8_0",
+        "file": "Phi-3.5-mini-instruct-Q8_0.gguf",
+        "bytes": 4061222688
+      }
+    ]
+  },
+  {
+    "id": "small:unsloth/Phi-4-mini-instruct-GGUF",
+    "source": "catalog",
+    "label": "Phi-4 Mini 3.8B",
+    "repo": "unsloth/Phi-4-mini-instruct-GGUF",
+    "params": 3.836,
+    "codingScore": 68,
+    "qat": false,
+    "kvKiBPerToken": 128,
+    "kvMetadata": {
+      "general.architecture": "phi3",
+      "phi3.rope.scaling.attn_factor": 1.190238118171692,
+      "phi3.context_length": 131072,
+      "phi3.rope.scaling.original_context_length": 4096,
+      "phi3.embedding_length": 3072,
+      "phi3.feed_forward_length": 8192,
+      "phi3.block_count": 32,
+      "phi3.attention.head_count": 24,
+      "phi3.attention.head_count_kv": 8,
+      "phi3.attention.layer_norm_rms_epsilon": 0.000009999999747378752,
+      "phi3.rope.dimension_count": 96,
+      "phi3.rope.freq_base": 10000,
+      "phi3.attention.sliding_window": 262144
+    },
+    "maxCtx": 131072,
+    "unsupportedReason": null,
+    "tags": [
+      "phi3",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "Q4_K_M",
+        "file": "Phi-4-mini-instruct-Q4_K_M.gguf",
+        "bytes": 2491874272
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "Phi-4-mini-instruct-Q5_K_M.gguf",
+        "bytes": 2848127968
+      },
+      {
+        "tag": "Q6_K",
+        "file": "Phi-4-mini-instruct-Q6_K.gguf",
+        "bytes": 3155622880
+      },
+      {
+        "tag": "BF16",
+        "file": "Phi-4-mini-instruct.BF16.gguf",
+        "bytes": 7680694240
+      },
+      {
+        "tag": "Q8_0",
+        "file": "Phi-4-mini-instruct.Q8_0.gguf",
+        "bytes": 4084611040
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF",
+    "source": "catalog",
+    "label": "DeepSeek R1 Qwen 1.5B",
+    "repo": "bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF",
+    "params": 1.777,
+    "codingScore": 40,
+    "qat": false,
+    "kvKiBPerToken": 28,
+    "kvMetadata": {
+      "general.architecture": "qwen2",
+      "qwen2.block_count": 28,
+      "qwen2.context_length": 131072,
+      "qwen2.embedding_length": 1536,
+      "qwen2.feed_forward_length": 8960,
+      "qwen2.attention.head_count": 12,
+      "qwen2.attention.head_count_kv": 2,
+      "qwen2.rope.freq_base": 10000,
+      "qwen2.attention.layer_norm_rms_epsilon": 9.999999974752427e-7
+    },
+    "maxCtx": 131072,
+    "unsupportedReason": null,
+    "tags": [
+      "qwen2",
+      "general"
+    ],
+    "blurb": "Lightweight model for quick, simple tasks.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "DeepSeek-R1-Distill-Qwen-1.5B-Q4_0.gguf",
+        "bytes": 1068807776
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf",
+        "bytes": 1117320800
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "DeepSeek-R1-Distill-Qwen-1.5B-Q5_K_M.gguf",
+        "bytes": 1285494368
+      },
+      {
+        "tag": "Q6_K",
+        "file": "DeepSeek-R1-Distill-Qwen-1.5B-Q6_K.gguf",
+        "bytes": 1464178784
+      },
+      {
+        "tag": "Q8_0",
+        "file": "DeepSeek-R1-Distill-Qwen-1.5B-Q8_0.gguf",
+        "bytes": 1894532192
+      },
+      {
+        "tag": "F16",
+        "file": "DeepSeek-R1-Distill-Qwen-1.5B-f16.gguf",
+        "bytes": 3560416352
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF",
+    "source": "catalog",
+    "label": "DeepSeek R1 Qwen 7B",
+    "repo": "bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF",
+    "params": 7.616,
+    "codingScore": 61,
+    "qat": false,
+    "kvKiBPerToken": 56,
+    "kvMetadata": {
+      "general.architecture": "qwen2",
+      "qwen2.block_count": 28,
+      "qwen2.context_length": 131072,
+      "qwen2.embedding_length": 3584,
+      "qwen2.feed_forward_length": 18944,
+      "qwen2.attention.head_count": 28,
+      "qwen2.attention.head_count_kv": 4,
+      "qwen2.rope.freq_base": 10000,
+      "qwen2.attention.layer_norm_rms_epsilon": 9.999999974752427e-7
+    },
+    "maxCtx": 131072,
+    "unsupportedReason": null,
+    "tags": [
+      "qwen2",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "DeepSeek-R1-Distill-Qwen-7B-Q4_0.gguf",
+        "bytes": 4444121056
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf",
+        "bytes": 4683073504
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "DeepSeek-R1-Distill-Qwen-7B-Q5_K_M.gguf",
+        "bytes": 5444831200
+      },
+      {
+        "tag": "Q6_K",
+        "file": "DeepSeek-R1-Distill-Qwen-7B-Q6_K.gguf",
+        "bytes": 6254198752
+      },
+      {
+        "tag": "Q8_0",
+        "file": "DeepSeek-R1-Distill-Qwen-7B-Q8_0.gguf",
+        "bytes": 8098525152
+      },
+      {
+        "tag": "F16",
+        "file": "DeepSeek-R1-Distill-Qwen-7B-f16.gguf",
+        "bytes": 15237853152
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/DeepSeek-R1-Distill-Llama-8B-GGUF",
+    "source": "catalog",
+    "label": "DeepSeek R1 Llama 8B",
+    "repo": "bartowski/DeepSeek-R1-Distill-Llama-8B-GGUF",
+    "params": 8.03,
+    "codingScore": 62,
+    "qat": false,
+    "kvKiBPerToken": 128,
+    "kvMetadata": {
+      "general.architecture": "llama",
+      "llama.block_count": 32,
+      "llama.context_length": 131072,
+      "llama.embedding_length": 4096,
+      "llama.feed_forward_length": 14336,
+      "llama.attention.head_count": 32,
+      "llama.attention.head_count_kv": 8,
+      "llama.rope.freq_base": 500000,
+      "llama.attention.layer_norm_rms_epsilon": 0.000009999999747378752,
+      "llama.vocab_size": 128256,
+      "llama.rope.dimension_count": 128
+    },
+    "maxCtx": 131072,
+    "unsupportedReason": null,
+    "tags": [
+      "llama",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "DeepSeek-R1-Distill-Llama-8B-Q4_0.gguf",
+        "bytes": 4675894112
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf",
+        "bytes": 4920736608
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "DeepSeek-R1-Distill-Llama-8B-Q5_K_M.gguf",
+        "bytes": 5732989792
+      },
+      {
+        "tag": "Q6_K",
+        "file": "DeepSeek-R1-Distill-Llama-8B-Q6_K.gguf",
+        "bytes": 6596008800
+      },
+      {
+        "tag": "Q8_0",
+        "file": "DeepSeek-R1-Distill-Llama-8B-Q8_0.gguf",
+        "bytes": 8540773216
+      },
+      {
+        "tag": "F16",
+        "file": "DeepSeek-R1-Distill-Llama-8B-f16.gguf",
+        "bytes": 16068893536
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/ibm-granite_granite-3.3-2b-instruct-GGUF",
+    "source": "catalog",
+    "label": "Granite 3.3 2B",
+    "repo": "bartowski/ibm-granite_granite-3.3-2b-instruct-GGUF",
+    "params": 2.534,
+    "codingScore": 45,
+    "qat": false,
+    "kvKiBPerToken": 80,
+    "kvMetadata": {
+      "general.architecture": "granite",
+      "granite.block_count": 40,
+      "granite.context_length": 131072,
+      "granite.embedding_length": 2048,
+      "granite.feed_forward_length": 8192,
+      "granite.attention.head_count": 32,
+      "granite.attention.head_count_kv": 8,
+      "granite.rope.freq_base": 10000000,
+      "granite.attention.layer_norm_rms_epsilon": 0.000009999999747378752,
+      "granite.vocab_size": 49159,
+      "granite.rope.dimension_count": 64,
+      "granite.attention.scale": 0.015625,
+      "granite.embedding_scale": 12,
+      "granite.residual_scale": 0.2199999988079071,
+      "granite.logit_scale": 8
+    },
+    "maxCtx": 131072,
+    "unsupportedReason": null,
+    "tags": [
+      "granite",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "ibm-granite_granite-3.3-2b-instruct-Q4_0.gguf",
+        "bytes": 1458632256
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "ibm-granite_granite-3.3-2b-instruct-Q4_K_M.gguf",
+        "bytes": 1545303616
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "ibm-granite_granite-3.3-2b-instruct-Q5_K_M.gguf",
+        "bytes": 1804826176
+      },
+      {
+        "tag": "Q6_K",
+        "file": "ibm-granite_granite-3.3-2b-instruct-Q6_K.gguf",
+        "bytes": 2080568896
+      },
+      {
+        "tag": "Q8_0",
+        "file": "ibm-granite_granite-3.3-2b-instruct-Q8_0.gguf",
+        "bytes": 2694120384
+      },
+      {
+        "tag": "BF16",
+        "file": "ibm-granite_granite-3.3-2b-instruct-bf16.gguf",
+        "bytes": 5069158176
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/ibm-granite_granite-3.3-8b-instruct-GGUF",
+    "source": "catalog",
+    "label": "Granite 3.3 8B",
+    "repo": "bartowski/ibm-granite_granite-3.3-8b-instruct-GGUF",
+    "params": 8.171,
+    "codingScore": 62,
+    "qat": false,
+    "kvKiBPerToken": 160,
+    "kvMetadata": {
+      "general.architecture": "granite",
+      "granite.block_count": 40,
+      "granite.context_length": 131072,
+      "granite.embedding_length": 4096,
+      "granite.feed_forward_length": 12800,
+      "granite.attention.head_count": 32,
+      "granite.attention.head_count_kv": 8,
+      "granite.rope.freq_base": 10000000,
+      "granite.attention.layer_norm_rms_epsilon": 0.000009999999747378752,
+      "granite.vocab_size": 49159,
+      "granite.rope.dimension_count": 128,
+      "granite.attention.scale": 0.0078125,
+      "granite.embedding_scale": 12,
+      "granite.residual_scale": 0.2199999988079071,
+      "granite.logit_scale": 16
+    },
+    "maxCtx": 131072,
+    "unsupportedReason": null,
+    "tags": [
+      "granite",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "Q4_0",
+        "file": "ibm-granite_granite-3.3-8b-instruct-Q4_0.gguf",
+        "bytes": 4667294752
+      },
+      {
+        "tag": "Q4_K_M",
+        "file": "ibm-granite_granite-3.3-8b-instruct-Q4_K_M.gguf",
+        "bytes": 4942873632
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "ibm-granite_granite-3.3-8b-instruct-Q5_K_M.gguf",
+        "bytes": 5797463072
+      },
+      {
+        "tag": "Q6_K",
+        "file": "ibm-granite_granite-3.3-8b-instruct-Q6_K.gguf",
+        "bytes": 6705464352
+      },
+      {
+        "tag": "Q8_0",
+        "file": "ibm-granite_granite-3.3-8b-instruct-Q8_0.gguf",
+        "bytes": 8684265280
+      },
+      {
+        "tag": "BF16",
+        "file": "ibm-granite_granite-3.3-8b-instruct-bf16.gguf",
+        "bytes": 16344139552
+      }
+    ]
+  },
+  {
+    "id": "small:bartowski/gemma-2-9b-it-GGUF",
+    "source": "catalog",
+    "label": "Gemma 2 9B",
+    "repo": "bartowski/gemma-2-9b-it-GGUF",
+    "params": 9.242,
+    "codingScore": 65,
+    "qat": false,
+    "kvKiBPerToken": 215.25,
+    "kvMetadata": {
+      "general.architecture": "gemma2",
+      "gemma2.context_length": 8192,
+      "gemma2.embedding_length": 3584,
+      "gemma2.block_count": 42,
+      "gemma2.feed_forward_length": 14336,
+      "gemma2.attention.head_count": 16,
+      "gemma2.attention.head_count_kv": 8,
+      "gemma2.attention.layer_norm_rms_epsilon": 9.999999974752427e-7,
+      "gemma2.attention.key_length": 256,
+      "gemma2.attention.value_length": 256,
+      "gemma2.attn_logit_softcapping": 50,
+      "gemma2.final_logit_softcapping": 30,
+      "gemma2.attention.sliding_window": 4096
+    },
+    "maxCtx": 8192,
+    "unsupportedReason": null,
+    "tags": [
+      "gemma2",
+      "general"
+    ],
+    "blurb": "General-purpose local language model.",
+    "quants": [
+      {
+        "tag": "Q4_K_M",
+        "file": "gemma-2-9b-it-Q4_K_M.gguf",
+        "bytes": 5761057728
+      },
+      {
+        "tag": "Q5_K_M",
+        "file": "gemma-2-9b-it-Q5_K_M.gguf",
+        "bytes": 6647366592
+      },
+      {
+        "tag": "Q6_K",
+        "file": "gemma-2-9b-it-Q6_K.gguf",
+        "bytes": 7589069760
+      },
+      {
+        "tag": "F16",
+        "file": "gemma-2-9b-it-Q8_0-f16.gguf",
+        "bytes": 10687308704
+      },
+      {
+        "tag": "Q8_0",
+        "file": "gemma-2-9b-it-Q8_0.gguf",
+        "bytes": 9827148736
+      }
+    ]
+  }
+]

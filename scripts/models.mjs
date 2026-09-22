@@ -63,7 +63,7 @@ if (flag('--search')) {
     console.log(`\n  Hugging Face · “${query}” · sized for ${device.budgetGB} GB\n`)
     if (!found.length) console.log('  No chat model matches.\n')
     for (const m of found) {
-      const note = m.fits ? m.modelId : m.limit === 'context' ? `${m.maxCtx / 1024}k context, needs 16k` : `needs ≈${m.needsGB} GB`
+      const note = m.fits ? m.modelId : m.unsupportedReason ?? (m.limit === 'context' ? 'Context too short' : `needs ≈${m.needsGB} GB`)
       console.log(
         `  ${m.label.slice(0, 34).padEnd(34)} ${m.quant.padEnd(11)} ${(m.sizeGB + ' GB').padStart(7)} ${(m.tokensPerSec + ' tok/s').padStart(9)}  ${note}`,
       )

@@ -24,7 +24,8 @@ contextBridge.exposeInMainWorld('jemero', {
   /** Catalog scored for this machine, plus what's installed and what's serving. */
   catalog: (priority) => invoke('models:catalog', priority),
   /** Chat models on Hugging Face beyond the catalog, sized for this machine. */
-  search: (query, priority) => invoke('models:search', query, priority),
+  search: (query, priority, page) => invoke('models:search', query, priority, page),
+  chatBudget: (request) => invoke('models:chat-budget', request),
   install: (modelId) => invoke('models:install', modelId),
   cancelInstall: (modelId) => invoke('models:cancel', modelId),
   remove: (modelId) => invoke('models:remove', modelId),

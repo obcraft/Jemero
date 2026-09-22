@@ -199,6 +199,12 @@ function registerStoreIpc(name, { pretty = false } = {}) {
 }
 
 function registerModelIpc() {
+  ipcMain.handle('models:chat-budget', async (_e, request) => {
+    const { chatBudget } = require('./chat-context.cjs')
+    const { URL_BASE } = require('./model.cjs')
+    return chatBudget(URL_BASE, request)
+  })
+
   ipcMain.handle('models:device', () => ({ ...detect(), summary: describe() }))
 
   ipcMain.handle('models:catalog', async (_e, priority = 'balanced') => {
@@ -228,9 +234,9 @@ function registerModelIpc() {
     }
   })
 
-  ipcMain.handle('models:search', async (_e, query, priority = 'balanced') => {
+  ipcMain.handle('models:search', async (_e, query, priority = 'balanced', page = 0) => {
     try {
-      return { ok: true, results: await hub.search(query, detect(), priority) }
+      return { ok: true, ...await hub.searchPage(query, detect(), priority, page) }
     } catch (err) {
       const offline = err.name === 'TimeoutError' || err.cause?.code === 'ENOTFOUND' || err.message === 'fetch failed'
       return { ok: false, reason: offline ? 'Can’t reach Hugging Face. Check your connection.' : err.message }
@@ -240,6 +246,7 @@ function registerModelIpc() {
   ipcMain.handle('models:install', async (_e, modelId) => {
     const plan = planFor(modelId, detect())
     if (!plan) return { ok: false, reason: `Unknown model: ${modelId}` }
+    if (!plan.fits) return { ok: false, reason: plan.unsupportedReason ?? `${plan.label} cannot run within this Mac’s memory and context limits.` }
     // A model found through search takes its catalog entry along, into model.json.
     const { entry } = entryFor(modelId)
     try {

@@ -2,6 +2,8 @@
 // Reached through the same-origin proxy at /llm (vite.config.ts in development,
 // electron/serve.cjs in the app), so the page never makes a cross-origin call.
 
+import { bridge } from './models'
+
 const BASE = '/llm'
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -96,6 +98,13 @@ export type StreamOpts = {
 }
 
 export async function streamChat(opts: StreamOpts): Promise<string> {
+  let maxTokens = opts.maxTokens ?? 4096
+  const api = bridge()
+  if (api) {
+    const budget = await api.chatBudget({ messages: opts.messages, maxTokens, thinking: opts.thinking ?? false })
+    maxTokens = budget.maxTokens
+    opts.signal?.throwIfAborted()
+  }
   const res = await fetch(`${BASE}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -105,7 +114,7 @@ export async function streamChat(opts: StreamOpts): Promise<string> {
       messages: opts.messages,
       temperature: opts.temperature ?? 0.2,
       top_p: opts.topP ?? 0.95,
-      max_tokens: opts.maxTokens ?? 4096,
+      max_tokens: maxTokens,
       // Rendered by the model's own jinja template (the server runs --jinja):
       // Qwen3 and friends read enable_thinking, gpt-oss reads reasoning_effort.
       // Templates that know neither simply ignore them, so this is safe to send

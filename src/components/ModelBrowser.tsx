@@ -15,16 +15,16 @@ import {
   type ModelPlan,
   type Priority,
   type Progress,
-  type SearchResult,
 } from '../lib/models'
 import { useSettings } from '../lib/settings'
 
 type View = 'fits' | 'downloaded' | 'all'
+type Size = 'all' | '1' | '3' | '8'
 
 const VIEWS: { id: View; label: string }[] = [
+  { id: 'all', label: 'All models' },
   { id: 'fits', label: 'For this Mac' },
   { id: 'downloaded', label: 'Downloaded' },
-  { id: 'all', label: 'All' },
 ]
 
 /** Shorter than this, a query matches half of Hugging Face. */
@@ -32,36 +32,46 @@ const MIN_QUERY = 2
 /** How long typing has to pause before the network is asked. */
 const DEBOUNCE_MS = 350
 
-type Hub = { status: 'done' | 'loading' | 'error'; results: ModelPlan[]; reason?: string }
+type Hub = { status: 'done' | 'loading' | 'error'; results: ModelPlan[]; reason?: string; hasMore: boolean }
+const IDLE: Hub = { status: 'done', results: [], hasMore: false }
 
-const IDLE: Hub = { status: 'done', results: [] }
-const toHub = (res: SearchResult): Hub =>
-  res.ok ? { status: 'done', results: res.results } : { status: 'error', results: [], reason: res.reason }
-
-/**
- * Hugging Face results for `query`, debounced. While a new query loads, the
- * previous results stay up (dimmed) rather than the list collapsing per keystroke.
- */
-function useHubSearch(query: string, priority: Priority): Hub {
+function useHubSearch(query: string, priority: Priority) {
   const q = query.trim()
   const [hub, setHub] = useState<Hub>(IDLE)
+  const [page, setPage] = useState(0)
+  const generation = useRef(0)
   useEffect(() => {
-    if (q.length < MIN_QUERY) return setHub(IDLE)
-    const hit = cachedSearch(q, priority)
-    if (hit) return setHub(toHub(hit))
-    setHub((h) => ({ status: 'loading', results: h.results }))
-    let live = true
-    const timer = setTimeout(() => {
-      searchHub(q, priority)
-        .catch((e: Error): SearchResult => ({ ok: false, reason: e.message }))
-        .then((res) => live && setHub(toHub(res)))
+    const current = ++generation.current
+    setPage(0)
+    if (q.length < MIN_QUERY) { setHub(IDLE); return }
+    setHub({ ...IDLE, status: 'loading' })
+    const timer = setTimeout(async () => {
+      try {
+        const res = cachedSearch(q, priority) ?? await searchHub(q, priority)
+        if (generation.current !== current) return
+        setHub(res.ok ? { status: 'done', results: res.results, hasMore: res.hasMore } : { ...IDLE, status: 'error', reason: res.reason })
+      } catch (e) {
+        if (generation.current === current) setHub({ ...IDLE, status: 'error', reason: (e as Error).message })
+      }
     }, DEBOUNCE_MS)
-    return () => {
-      live = false
-      clearTimeout(timer)
-    }
+    return () => { generation.current++; clearTimeout(timer) }
   }, [q, priority])
-  return hub
+  const loadMore = async () => {
+    if (hub.status === 'loading') return
+    const current = generation.current
+    const next = hub.status === 'error' && !hub.results.length ? 0 : page + 1
+    setHub((h) => ({ ...h, status: 'loading', reason: undefined }))
+    try {
+      const res = cachedSearch(q, priority, next) ?? await searchHub(q, priority, next)
+      if (generation.current !== current) return
+      if (!res.ok) { setHub((h) => ({ ...h, status: 'error', reason: res.reason })); return }
+      setPage(next)
+      setHub((h) => ({ status: 'done', hasMore: res.hasMore, results: [...new Map([...h.results, ...res.results].map((m) => [m.modelId, m])).values()] }))
+    } catch (e) {
+      if (generation.current === current) setHub((h) => ({ ...h, status: 'error', reason: (e as Error).message }))
+    }
+  }
+  return { ...hub, loadMore }
 }
 
 /**
@@ -84,7 +94,9 @@ export default function ModelBrowser({
   const [progress, setProgress] = useState<Record<string, Progress>>({})
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [view, setView] = useState<View>('fits')
+  const [view, setView] = useState<View>('all')
+  const [size, setSize] = useState<Size>('all')
+  const [sort, setSort] = useState<'recommended' | 'smallest'>('recommended')
   const { modelPriority } = useSettings()
   const searchInput = useRef<HTMLInputElement>(null)
 
@@ -145,27 +157,33 @@ export default function ModelBrowser({
 
   const run = async (call: () => Promise<{ ok: boolean; reason?: string }> | undefined) => {
     setError(null)
-    const res = await call()
-    if (res && !res.ok && res.reason) setError(res.reason)
+    try {
+      const res = await call()
+      if (res && !res.ok && res.reason) setError(res.reason)
+      return res
+    } catch (e) { setError((e as Error).message) }
   }
+
+  const withinSize = (m: ModelPlan) => size === 'all' || (m.params != null && m.params <= Number(size))
+  const compare = (a: ModelPlan, b: ModelPlan) => Number(b.fits) - Number(a.fits) || (sort === 'smallest' ? (a.params ?? Infinity) - (b.params ?? Infinity) || a.sizeGB - b.sizeGB : b.score - a.score)
 
   const list = useMemo(() => {
     const rows = (snap?.models ?? []).filter((m) => {
       if (view === 'fits' && !m.fits) return false
       if (view === 'downloaded' && !downloaded.has(m.modelId) && !partial.has(m.modelId)) return false
-      return matchesQuery(m, query)
+      return withinSize(m) && matchesQuery(m, query)
     })
     // Serving first, then the recommendation, then the rest in catalog order.
     const rank = (m: ModelPlan) => (m.modelId === snap?.active ? 0 : m.modelId === snap?.recommended ? 1 : 2)
-    return rows.sort((a, b) => rank(a) - rank(b))
-  }, [snap, view, query, downloaded, partial])
+    return rows.sort((a, b) => sort === 'smallest' ? compare(a, b) : rank(a) - rank(b) || compare(a, b))
+  }, [snap, view, query, downloaded, partial, size, sort])
 
   // Hugging Face only adds what isn't listed above, filtered the same way.
-  const searching = available() && query.trim().length >= MIN_QUERY && view !== 'downloaded'
+  const searching = open && available() && query.trim().length >= MIN_QUERY && view !== 'downloaded'
   const hub = useHubSearch(searching ? query : '', modelPriority)
   const listed = useMemo(() => new Set((snap?.models ?? []).map((m) => m.repo)), [snap])
-  const found = hub.results.filter((m) => !listed.has(m.repo))
-  const hubRows = view === 'fits' ? found.filter((m) => m.fits) : found
+  const found = hub.results.filter((m) => !listed.has(m.repo) && withinSize(m))
+  const hubRows = (view === 'fits' ? found.filter((m) => m.fits) : found).sort(compare)
   const tooBig = found.length - hubRows.length
   const hubEmpty = hub.status === 'done' && !hubRows.length
   const q = query.trim()
@@ -182,10 +200,12 @@ export default function ModelBrowser({
       progress={progress[m.modelId]}
       onGet={() => {
         useWhenReady.current.add(m.modelId)
-        return run(() => bridge()?.install(m.modelId))
+        return run(() => bridge()?.install(m.modelId)).then((res) => {
+          if (!res?.ok) useWhenReady.current.delete(m.modelId)
+        })
       }}
       onUse={() => run(() => bridge()?.activate(m.modelId))}
-      onCancel={() => void bridge()?.cancelInstall(m.modelId)}
+      onCancel={() => { useWhenReady.current.delete(m.modelId); void bridge()?.cancelInstall(m.modelId) }}
       onDelete={() => run(() => bridge()?.remove(m.modelId)).then(() => loadSnapshot(true))}
     />
   )
@@ -208,7 +228,7 @@ export default function ModelBrowser({
           ref={searchInput}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search any model, like gemma 1b"
+          placeholder="Search Hugging Face or paste a repo link"
           spellCheck={false}
           aria-label="Search models"
         />
@@ -251,6 +271,16 @@ export default function ModelBrowser({
         <>
           {error && <div className="banner bad">{error}</div>}
 
+          <div className="model-filters">
+            <label>Parameters <select aria-label="Filter by model parameters" value={size} onChange={(e) => setSize(e.target.value as Size)}>
+              <option value="all">Any size</option><option value="1">1B or smaller</option><option value="3">3B or smaller</option><option value="8">8B or smaller</option>
+            </select></label>
+            <label>Sort <select aria-label="Sort models" value={sort} onChange={(e) => setSort(e.target.value as 'recommended' | 'smallest')}>
+              <option value="recommended">Recommended</option><option value="smallest">Smallest first</option>
+            </select></label>
+            <span>{list.length + hubRows.length} models · {list.filter((m) => m.fits).length + hubRows.filter((m) => m.fits).length} fit this Mac</span>
+          </div>
+          <p className="list-foot">Download public GGUF language models from Hugging Face. Models that cannot run here stay disabled.</p>
           <div className="model-list">
             {list.map(row)}
 
@@ -264,14 +294,14 @@ export default function ModelBrowser({
               </p>
             )}
 
-            {searching && !(hubEmpty && list.length) && (
+            {searching && (
               <section className="hub-results" aria-busy={hub.status === 'loading'}>
                 <div className="list-heading">
                   On Hugging Face
                   {hub.status === 'loading' && <span className="menu-spinner" aria-label="Searching" />}
                 </div>
                 {hub.status === 'error' ? (
-                  <p className="note list-note">{hub.reason}</p>
+                  <p className="note list-note">{hub.reason} <button className="text-btn" onClick={() => void hub.loadMore()}>Retry</button></p>
                 ) : hub.status === 'loading' && !hubRows.length ? (
                   <div className="skeleton-list">
                     <div className="skeleton-row" />
@@ -280,7 +310,8 @@ export default function ModelBrowser({
                 ) : (
                   <div className={hub.status === 'loading' ? 'stale' : undefined}>{hubRows.map(row)}</div>
                 )}
-                {hubEmpty && !tooBig && <p className="note list-note">No chat model matches “{q}”.</p>}
+                {hubEmpty && !tooBig && <p className="note list-note">No additional GGUF models match these filters{hub.hasMore ? ' on this page' : ''}.</p>}
+                {hub.hasMore && hub.status !== 'error' && <p className="list-foot"><button className="btn ghost" disabled={hub.status === 'loading'} onClick={() => void hub.loadMore()}>{hub.status === 'loading' ? 'Loading…' : 'Load more from Hugging Face'}</button></p>}
                 {hub.status === 'done' && tooBig > 0 && (
                   <p className="list-foot">
                     {tooBig === 1 ? 'One more match doesn’t' : `${tooBig} more matches don’t`} fit this Mac.{' '}
@@ -327,17 +358,12 @@ function ModelRow({
   const pct = progress?.total ? Math.min(100, ((progress.received ?? 0) / progress.total) * 100) : 0
 
   let action
-  if (!model.fits)
-    action =
-      model.limit === 'context' ? (
-        <span className="row-note" title={`Its context window is ${model.maxCtx.toLocaleString()} tokens; Jemero needs 16k.`}>
-          {Math.round(model.maxCtx / 1024)}k context
-        </span>
-      ) : (
-        <span className="row-note" title={`Needs about ${formatGB(model.needsGB)}; this Mac can give a model ${formatGB(budgetGB)}.`}>
-          Too big
-        </span>
-      )
+  if (!model.fits) {
+    const reason = model.unsupportedReason ?? (model.limit === 'context'
+      ? `This model has only ${model.maxCtx.toLocaleString()} tokens of context.`
+      : `Needs about ${formatGB(model.needsGB)}; this Mac can give a model ${formatGB(budgetGB)}.`)
+    action = <button className="btn ghost" disabled title={reason}>{model.limit === 'memory' ? 'Too big' : 'Unsupported'}</button>
+  }
   else if (active) action = <span className="row-note ok">In use</span>
   else if (busy)
     action = (
@@ -378,7 +404,8 @@ function ModelRow({
           )}
         </div>
         <div className="row-meta">
-          {model.tokensPerSec} tok/s · {formatGB(model.sizeGB)}
+          {model.params != null && `${model.params < 1 ? `${Math.round(model.params * 1000)}M` : `${model.params}B`} · `}{formatGB(model.sizeGB)} · ~{model.tokensPerSec} tok/s
+          {model.ctx != null && model.ctx < 16384 && <span title="A shorter context supports smaller prompts and answers">{model.ctx / 1024}k context</span>}
           <span className="row-quant">{model.quant}</span>
         </div>
       </div>

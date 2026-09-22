@@ -42,3 +42,6 @@ logs/
 *.swp
 .kilo/
 .claude/settings.local.json
+
+# Local verification screenshots
+output/

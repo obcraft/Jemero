@@ -12,6 +12,7 @@
 const { GB } = require('./hardware.cjs')
 
 const KiB = 1024
+const { kvBytes: metadataKvBytes } = require('./gguf.cjs')
 
 /**
  * Quality cost of quantization, in codingScore points. Also the list of
@@ -31,18 +32,19 @@ const QUANT_PENALTY = {
   Q4_K_M: 3,
   Q4_0: 4.5, // plain 4-bit; the native format of quantization-aware-trained (QAT) weights
   Q4_K_S: 4.5,
-  // No IQ quants: on Metal their prompt processing is markedly slower, and a
-  // long wait for the first token is the one delay this app can't hide.
+  F32: 0, F16: 0, BF16: 0,
+  Q5_0: 2, Q5_1: 2, Q4_1: 4,
+  Q3_K_L: 6, Q3_K_M: 7, Q3_K_S: 8, Q2_K: 10, Q2_K_S: 11,
+  IQ4_NL: 4, IQ4_XS: 5, IQ3_XXS: 8, IQ3_XS: 8, IQ3_S: 7, IQ3_M: 7,
+  IQ2_XXS: 12, IQ2_XS: 11, IQ2_S: 10, IQ2_M: 10, IQ1_S: 16, IQ1_M: 15,
+  'UD-Q3_K_XL': 6, 'UD-Q2_K_XL': 10, 'UD-IQ3_XXS': 8, 'UD-IQ2_XXS': 12,
+  'UD-IQ1_S': 16, 'UD-IQ1_M': 15,
 }
 
 /** What Q4_0 costs a model that was trained for it (Google's QAT releases). */
 const QAT_Q4_0_PENALTY = 0.5
 
-/**
- * Below 4-bit, code generation starts dropping closing braces and inventing
- * APIs, and sparse-MoE models degrade faster still because each expert carries
- * less redundancy. So the catalog simply doesn't offer Q3 and below.
- */
+// Verified built-in models; Hub search can offer additional quantizations.
 const CATALOG = [
   {
     id: 'qwen3-coder-30b-a3b',
@@ -311,14 +313,12 @@ const CATALOG = [
   },
 ]
 
-/**
- * This app needs 16k and gains nothing from more: `trimHistory` feeds at most
- * ~36k characters of history (~10k tokens) and completions are capped at 4k, so
- * a bigger window would only cost memory and slower prompt processing. Treat 16k
- * as a requirement, a model that can only be served at 8k here is a model that
- * does not fit, and saying so is more useful than shipping a truncated context.
- */
+// Verified small/general models are bundled so browsing also works offline.
+CATALOG.push(...require('./catalog-small.json'))
+
+// Prefer 16k, but allow short-context models and reduce the cache on smaller Macs.
 const TARGET_CTX = 16384
+const MIN_CTX = 512
 
 /**
  * The speed a model has to reach before quality alone decides. "Speed" wants
@@ -359,11 +359,15 @@ function entryFor(modelId) {
 /** Local model id: org/<gguf basename>. Also the server's --alias. */
 function localId(entry, quant) {
   const org = entry.repo.split('/')[0]
+  if (quant.file.includes('/') || (entry.source === 'hub' && entry.storageVersion === 2)) {
+    const hash = require('node:crypto').createHash('sha256').update(`${entry.repo}/${quant.file}`).digest('hex').slice(0, 12)
+    return `${org}/${quant.file.split('/').pop().replace(/\.gguf$/i, '')}-${hash}`
+  }
   return `${org}/${quant.file.replace(/\.gguf$/i, '')}`
 }
 
 function downloadUrl(entry, quant) {
-  return `https://huggingface.co/${entry.repo}/resolve/main/${encodeURIComponent(quant.file)}?download=true`
+  return `https://huggingface.co/${entry.repo}/resolve/main/${quant.file.split('/').map(encodeURIComponent).join('/')}?download=true`
 }
 
 /**
@@ -378,17 +382,22 @@ function activeBytes(entry, bytes) {
 }
 
 function kvBytes(entry, ctx) {
+  if (entry.unsupportedReason) return 0
+  if (entry.kvMetadata) return metadataKvBytes(entry.kvMetadata, ctx)
   return entry.kvKiBPerToken * KiB * ctx * KV_RATIO
 }
 
 /** llama.cpp's compute buffers and graph, on top of weights and KV cache. */
 const RUNTIME_OVERHEAD = 512 * 1024 ** 2
 
-/** The served context, or null when 16k can't be wired alongside the weights. */
+/** Largest usable context that leaves room for weights, cache and buffers. */
 function pickCtx(entry, bytes, budget) {
-  if (TARGET_CTX > entry.maxCtx) return null
-  if (bytes + kvBytes(entry, TARGET_CTX) + RUNTIME_OVERHEAD > budget) return null
-  return TARGET_CTX
+  if (entry.unsupportedReason) return null
+  for (let ctx = Math.floor(Math.min(TARGET_CTX, entry.maxCtx) / 256) * 256; ctx >= MIN_CTX; ctx = Math.floor(ctx / 2 / 256) * 256) {
+    const kv = kvBytes(entry, ctx)
+    if (Number.isFinite(kv) && kv >= 0 && bytes + kv + RUNTIME_OVERHEAD <= budget) return ctx
+  }
+  return null
 }
 
 /**
@@ -398,7 +407,7 @@ function pickCtx(entry, bytes, budget) {
  */
 function evaluate(entry, quant, device, target = SPEED_TARGET) {
   const ctx = pickCtx(entry, quant.bytes, device.budgetBytes)
-  const kv = kvBytes(entry, TARGET_CTX)
+  const kv = kvBytes(entry, ctx ?? Math.min(MIN_CTX, entry.maxCtx))
   // Report exactly what the fit check tested, so "needs 18.5 GB" against an
   // 18 GB budget reads as the refusal it is instead of looking like a rounding bug.
   const total = quant.bytes + kv + RUNTIME_OVERHEAD
@@ -428,11 +437,12 @@ function evaluate(entry, quant, device, target = SPEED_TARGET) {
     blurb: entry.blurb,
     formatRisk: entry.formatRisk ?? null,
     fits: ctx !== null,
-    // Why it doesn't fit: a window shorter than the 16k this app needs, or memory.
-    limit: ctx !== null ? null : TARGET_CTX > entry.maxCtx ? 'context' : 'memory',
+    // Explain the actual runtime, context or memory limit.
+    limit: ctx !== null ? null : entry.unsupportedReason ? 'runtime' : MIN_CTX > entry.maxCtx ? 'context' : 'memory',
+    unsupportedReason: entry.unsupportedReason ?? null,
     maxCtx: entry.maxCtx,
     needsGB: round(total / GB),
-    score: ctx === null ? 0 : quality * (0.55 + 0.45 * speedFactor),
+    score: ctx === null ? 0 : quality * (0.55 + 0.45 * speedFactor) * (0.7 + 0.3 * Math.min(1, ctx / TARGET_CTX)),
     source: entry.source ?? 'catalog',
     author: entry.repo.split('/')[0],
     downloads: entry.downloads ?? null,
@@ -519,4 +529,5 @@ module.exports = {
   SPEED_TARGET,
   SPEED_TARGETS,
   TARGET_CTX,
+  MIN_CTX,
 }

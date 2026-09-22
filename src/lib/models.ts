@@ -31,14 +31,15 @@ export type ModelPlan = {
   needsGB: number
   ctx: number | null
   tokensPerSec: number
-  params: number
+  params: number | null
   activeParams: number | null
   moe: boolean
   blurb: string
   formatRisk: string | null
   fits: boolean
-  /** Why it doesn't fit: too little memory, or a context window under 16k. */
-  limit: 'memory' | 'context' | null
+  /** Why the model cannot be run locally. */
+  limit: 'memory' | 'context' | 'runtime' | null
+  unsupportedReason: string | null
   maxCtx: number
   score: number
   /** 'catalog' is the curated list; 'hub' was found through Hugging Face search. */
@@ -48,7 +49,7 @@ export type ModelPlan = {
   downloads: number | null
 }
 
-export type SearchResult = { ok: true; results: ModelPlan[] } | { ok: false; reason: string }
+export type SearchResult = { ok: true; results: ModelPlan[]; hasMore: boolean } | { ok: false; reason: string }
 
 export type InstalledModel = {
   id: string
@@ -86,7 +87,8 @@ type Bridge = {
   library: { load(): unknown; save(value: unknown): void }
   device(): Promise<Device>
   catalog(priority?: Priority): Promise<CatalogSnapshot>
-  search(query: string, priority?: Priority): Promise<SearchResult>
+  search(query: string, priority?: Priority, page?: number): Promise<SearchResult>
+  chatBudget(request: { messages: { role: string; content: string }[]; maxTokens: number; thinking: boolean }): Promise<{ maxTokens: number; context: number }>
   install(modelId: string): Promise<{ ok: boolean; reason?: string }>
   cancelInstall(modelId: string): Promise<{ ok: boolean }>
   remove(modelId: string): Promise<{ ok: boolean; reason?: string }>
@@ -175,17 +177,17 @@ export function startSnapshotSync() {
 
 const searches = new Map<string, SearchResult>()
 
-export const searchKey = (query: string, p: Priority) => `${p}:${query.trim().toLowerCase().replace(/\s+/g, ' ')}`
+export const searchKey = (query: string, p: Priority, page = 0) => `${p}:${page}:${query.trim().toLowerCase().replace(/\s+/g, ' ')}`
 
-export function cachedSearch(query: string, p: Priority) {
-  return searches.get(searchKey(query, p)) ?? null
+export function cachedSearch(query: string, p: Priority, page = 0) {
+  return searches.get(searchKey(query, p, page)) ?? null
 }
 
-export async function searchHub(query: string, p: Priority): Promise<SearchResult> {
+export async function searchHub(query: string, p: Priority, page = 0): Promise<SearchResult> {
   const api = bridge()
   if (!api) return { ok: false, reason: 'Open the Mac app to search models.' }
-  const res = await api.search(query, p)
-  if (res.ok) searches.set(searchKey(query, p), res)
+  const res = await api.search(query, p, page)
+  if (res.ok) searches.set(searchKey(query, p, page), res)
   return res
 }
 
@@ -194,9 +196,11 @@ export async function searchHub(query: string, p: Priority): Promise<SearchResul
  * "gemma 1b" finds "gemma-3-1b-it" and "coder 7b" finds "Qwen2.5-Coder 7B".
  */
 export function matchesQuery(m: ModelPlan, query: string) {
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const words = query.trim().replace(/^https?:\/\/(?:www\.)?(?:huggingface\.co|hf\.co)\//i, '').toLowerCase().split(/[\s/_-]+/).filter(Boolean)
   const haystack = `${m.label} ${m.repo} ${m.quant} ${m.tags.join(' ')}`.toLowerCase()
-  return words.every((w) => haystack.includes(w))
+  return words.every((w) => /^\d+(?:\.\d+)?[bm]$/i.test(w)
+    ? new RegExp(`(?:^|[^0-9.])${w.replace('.', '\\.')}(?![a-z0-9])`, 'i').test(haystack)
+    : haystack.includes(w))
 }
 
 /** One decimal below 100 GB, so "16.5 GB budget" and "16.5 GB" never disagree. */
@@ -231,6 +235,6 @@ export function modelLabel(id: string): string {
 
 /** "3.3B of 30B active" reads better than "MoE" for anyone who hasn't met one. */
 export function sizeLine(m: ModelPlan) {
-  const params = m.moe && m.activeParams ? `${m.params}B · ${m.activeParams}B active` : `${m.params}B`
+  const params = m.moe && m.activeParams ? `${m.params}B · ${m.activeParams}B active` : m.params == null ? 'Unknown parameters' : m.params < 1 ? `${Math.round(m.params * 1000)}M` : `${m.params}B`
   return `${params} · ${m.quant} · ${formatGB(m.sizeGB)}`
 }

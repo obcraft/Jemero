@@ -1,0 +1,57 @@
+// Isolated UI smoke check: real renderer/preload, fixture IPC, no model-store writes.
+const { app, BrowserWindow, ipcMain } = require('electron')
+const assert = require('node:assert/strict')
+const fs = require('node:fs/promises')
+const path = require('node:path')
+const os = require('node:os')
+const { rank } = require('../electron/catalog.cjs')
+const { startServer } = require('../electron/serve.cjs')
+
+app.whenReady().then(async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'jemero-browser-'))
+  app.setPath('userData', temp)
+  const device = { chip: 'Apple M4 Pro', ramGB: 24, budgetGB: 16.5, budgetBytes: 16.5 * 1024 ** 3, effectiveBandwidthGBs: 200 }
+  const models = rank(device)
+  const snapshot = { device, models, recommended: models[0].modelId, installed: [], active: null, priority: 'balanced', runtime: {}, freeBytes: 100 * 1024 ** 3 }
+  for (const store of ['settings', 'library']) {
+    ipcMain.on(`${store}:load`, e => { e.returnValue = null })
+    ipcMain.on(`${store}:save`, () => {})
+  }
+  ipcMain.handle('models:catalog', () => snapshot)
+  ipcMain.handle('models:search', (_e, query, priority, page = 0) => ({ ok: true, hasMore: page === 0, results: [{ ...models.find(m => m.label === 'Gemma 3 1B'), modelId: `testing/remote-${page}`, repo: `testing/remote-${page}`, source: 'hub', author: 'testing', label: `Remote Gemma 1B page ${page + 1}` }] }))
+  const downloads = []
+  ipcMain.handle('models:install', (_e, id) => { downloads.push(id); return { ok: true } })
+  const origin = await startServer(path.resolve('dist'))
+  const win = new BrowserWindow({ width: 1080, height: 900, show: false, webPreferences: { preload: path.resolve('electron/preload.cjs'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } })
+  await win.loadURL(`${origin}/#models`)
+  const run = code => win.webContents.executeJavaScript(code)
+  const until = async (expression) => {
+    for (let n = 0; n < 100; n++) { if (await run(expression)) return; await new Promise(r => setTimeout(r, 100)) }
+    throw new Error(`Timed out: ${expression}`)
+  }
+  await until('document.querySelectorAll(".model-row").length >= 43')
+  assert.ok(await run('!!document.querySelector(".model-row.unfit button:disabled")'))
+  await fs.mkdir('output', { recursive: true })
+  await fs.writeFile('output/models-all.png', (await win.webContents.capturePage()).toPNG())
+  await run(`(() => { const select = document.querySelector('[aria-label="Filter by model parameters"]'); select.value = '1'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`)
+  await until('document.querySelectorAll(".model-row").length === 7')
+  assert.equal(await run('document.querySelectorAll(".model-row.unfit").length'), 0)
+  assert.ok(await run('document.body.textContent.includes("Gemma 3 1B")'))
+  await run(`(() => { const select = document.querySelector('[aria-label="Sort models"]'); select.value = 'smallest'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`)
+  await until('document.querySelector(".model-row strong").textContent === "SmolLM2 135M"')
+  await run('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+  await new Promise(r => setTimeout(r, 200))
+  await fs.writeFile('output/models-small.png', (await win.webContents.capturePage()).toPNG())
+  await run('document.querySelector(".model-row .row-actions button").click()')
+  await until('true')
+  await new Promise(r => setTimeout(r, 100))
+  assert.equal(downloads.length, 1)
+  await run(`(() => { const input = document.querySelector('[aria-label="Search models"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'gemma 1b'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`)
+  await until('document.body.textContent.includes("Remote Gemma 1B page 1")')
+  await run(`Array.from(document.querySelectorAll('button')).find(b => b.textContent === 'Load more from Hugging Face').click()`)
+  await until('document.body.textContent.includes("Remote Gemma 1B page 2")')
+  assert.ok(await run('document.body.textContent.includes("Remote Gemma 1B page 1")'))
+  console.log('UI passed: 43 models, disabled oversized entries, 7 models ≤1B, smallest-first sorting, download action, search pagination.')
+  win.destroy()
+  app.exit(0)
+}).catch(error => { console.error(error); app.exit(1) })

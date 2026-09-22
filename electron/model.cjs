@@ -100,7 +100,7 @@ async function choose() {
     ...[...local].sort((a, b) => (byId.get(b)?.score ?? 0) - (byId.get(a)?.score ?? 0)),
   ].filter(Boolean)
 
-  const id = order.find((candidate) => local.includes(candidate)) ?? null
+  const id = order.find((candidate) => local.includes(candidate) && (byId.get(candidate) ?? planFor(candidate, device))?.fits) ?? null
   const plan = id ? byId.get(id) ?? planFor(id, device) : null
   return { id, ctx: plan?.ctx ?? Number(process.env.JEMERO_CTX ?? TARGET_CTX), recommended, installed: local, plan }
 }
@@ -186,9 +186,11 @@ async function serveModel(id, ctx, onStatus = () => {}) {
 async function switchModel(id, onStatus = () => {}) {
   const device = detect()
   const plan = planFor(id, device)
-  if (plan && !plan.fits) {
-    return { ok: false, reason: `${plan.label} needs about ${plan.needsGB} GB and this Mac can only give a model ${device.budgetGB} GB.` }
+  if (!plan) return { ok: false, reason: 'This model’s requirements are unknown. Select a model from the browser.' }
+  if (!plan.fits) {
+    return { ok: false, reason: plan.unsupportedReason ?? `${plan.label} needs about ${plan.needsGB} GB and this Mac can only give a model ${device.budgetGB} GB.` }
   }
+  if (!(await installed()).some((m) => m.id === id && m.complete)) return { ok: false, reason: 'Download this model before using it.' }
   onStatus('Stopping the current model…')
   stopServing()
   await waitForExit()
