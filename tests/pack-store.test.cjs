@@ -251,3 +251,60 @@ test('removing a pack deletes it and its staging', async () => {
     await t.done()
   }
 })
+
+test('rollback returns to the previous version, verified, and can go forward again', async () => {
+  const t = await setup()
+  try {
+    publish(t.dist, [v1])
+    const store = t.store()
+    await store.install('demo')
+    publish(t.dist, [v2])
+    await store.install('demo')
+    assert.equal((await store.installed()).demo.version, '2.0.0')
+    assert.deepEqual(await store.rollback('demo'), { ok: true, version: '1.0.0' })
+    const active = (await store.installed()).demo
+    assert.equal(active.version, '1.0.0')
+    assert.equal(active.previous, '2.0.0')
+    assert.deepEqual(await store.verifyInstalled('demo'), [])
+    assert.deepEqual(await store.rollback('demo'), { ok: true, version: '2.0.0' })
+
+    // A damaged earlier version is refused, and the active one stays.
+    fs.writeFileSync(path.join(store.packDir('demo', '1.0.0'), 'files', 'demo.js'), 'broken')
+    const res = await store.rollback('demo')
+    assert.equal(res.ok, false)
+    assert.match(res.reason, /damaged/)
+    assert.equal((await store.installed()).demo.version, '2.0.0')
+  } finally {
+    await t.done()
+  }
+})
+
+test('losing the connection for good mid-download fails clearly and keeps the previous version', async () => {
+  let served = 0
+  const t = await setup({
+    onRequest(req, res) {
+      // The server goes away after the manifest: every file request dies mid-way.
+      if (req.url.includes('/2.0.0/files/')) {
+        served++
+        res.writeHead(200, { 'content-length': 1000 })
+        res.write('x', () => res.destroy())
+        return true
+      }
+      return false
+    },
+  })
+  try {
+    publish(t.dist, [v1])
+    const store = t.store()
+    await store.install('demo')
+    publish(t.dist, [v2])
+    const res = await store.install('demo')
+    assert.equal(res.ok, false)
+    assert.ok(res.reason.length > 0 && !/undefined/.test(res.reason), res.reason)
+    assert.ok(served >= 4, 'retried before giving up')
+    assert.equal((await store.installed()).demo.version, '1.0.0')
+    assert.deepEqual(await store.verifyInstalled('demo'), [])
+  } finally {
+    await t.done()
+  }
+})

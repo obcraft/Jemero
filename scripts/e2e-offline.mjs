@@ -18,10 +18,21 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const { openLibrary } = require('../electron/library-db.cjs')
+const { startStaticServer } = require('../electron/static-server.cjs')
+
+// A packaged app has no pack host built in: for its online run, packs-dist is
+// published on loopback, standing in for the real pack server.
+let packHost = null
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const APP = process.env.JEMERO_APP ?? null
-const MODEL = process.env.E2E_MODEL ?? 'bartowski/Qwen2.5-Coder-1.5B-Instruct-Q8_0'
+// Acceptance runs on the 14B: the 1.5B can't reliably write a working component
+// (E2E_MODEL=bartowski/Qwen2.5-Coder-1.5B-Instruct-Q8_0 for a quick smoke run).
+const MODEL = process.env.E2E_MODEL ?? 'bartowski/Qwen2.5-Coder-14B-Instruct-Q4_K_M'
 const MODELS = process.env.JEMERO_MODELS ?? path.join(os.homedir(), 'Library/Application Support/Jemero/models')
 const LLM_PORT = 8758
 const DEBUG_PORT = 9333
@@ -53,7 +64,11 @@ function launch({ offline }) {
     JEMERO_URL: `http://127.0.0.1:${LLM_PORT}`,
     JEMERO_KEEP_WARM: '1',
     JEMERO_E2E: '1',
-    ...(offline ? { JEMERO_OFFLINE: '1', JEMERO_PACKS_URL: 'http://127.0.0.1:9' } : {}),
+    ...(offline
+      ? { JEMERO_OFFLINE: '1', JEMERO_PACKS_URL: 'http://127.0.0.1:9' }
+      : packHost
+        ? { JEMERO_PACKS_URL: packHost.url }
+        : {}),
   }
   const [cmd, args] = APP
     ? [path.join(APP, 'Contents/MacOS', path.basename(APP, '.app')), [`--remote-debugging-port=${DEBUG_PORT}`]]
@@ -134,7 +149,12 @@ async function connect(timeoutMs = 180_000) {
 
   /** Run code in the canvas, whether it's in-process or an OOPIF. */
   const inCanvas = async (expression) => {
-    for (const [sid, url] of frames) if (url.includes('/kits/stage.html')) return evaluate(expression, sid)
+    // An out-of-process canvas is attached before it navigates, so its URL is
+    // asked for, not remembered.
+    for (const sid of frames.keys()) {
+      const href = await evaluate('location.href', sid).catch(() => '')
+      if (href.includes('/kits/stage.html')) return evaluate(expression, sid)
+    }
     const { frameTree } = await send('Page.getFrameTree')
     const child = (frameTree.childFrames ?? []).find((f) => f.frame.url.includes('/kits/stage.html'))
     if (!child) return undefined
@@ -195,8 +215,75 @@ const CANVAS_KATEX = `(() => {
   return { spans: document.querySelectorAll('.katex').length, font, fontsLoaded, text: k.textContent.slice(0, 60) }
 })()`
 
+/**
+ * When the preview shows an error, press "Fix with the model" the way a
+ * person would, up to `tries` times, then look for KaTeX in the canvas.
+ */
+async function katexAfterFixes(app, tries = 2) {
+  for (let fix = 0; ; fix++) {
+    const k = await app.waitFor('KaTeX in the canvas', CANVAS_KATEX, 20_000, app.inCanvas).catch(() => null)
+    if (k) return k
+    const error = await app.evaluate(`document.querySelector('.canvas-error')?.textContent ?? ''`).catch(() => '')
+    if (!error || fix >= tries) {
+      results.diagnosis = await app.diagnose()
+      throw new Error(`KaTeX never appeared in the canvas${error ? `: ${error.slice(0, 200)}` : ''}`)
+    }
+    log(`canvas error, pressing Fix with the model (${fix + 1}/${tries}): ${error.slice(0, 120)}`)
+    const before = readLibrary().items[0]?.versions.length ?? 0
+    await app.evaluate(`document.querySelector('.canvas-error .btn')?.click()`)
+    const until = Date.now() + 600_000
+    while ((readLibrary().items[0]?.versions.length ?? 0) <= before) {
+      const last = readLibrary().items[0]?.turns.at(-1)
+      if (last?.role === 'assistant' && last.error && last.at > Date.now() - 5000) break
+      if (Date.now() > until) throw new Error('Timed out waiting for the fix')
+      await sleep(1000)
+    }
+    await app.waitFor('the app to go idle', IDLE, 60_000)
+    await sleep(1500)
+  }
+}
+
+const CANVAS_OK = `(() => {
+  const root = document.getElementById('jm-root')
+  return !!root && root.children.length > 0 && !root.querySelector('.jm-error')
+})()`
+
+/** The canvas shows the component (no error box), pressing Fix up to twice if it doesn't. */
+async function renderedAfterFixes(app, tries = 2) {
+  for (let fix = 0; ; fix++) {
+    const ok = await app.waitFor('the component in the canvas', CANVAS_OK, 20_000, app.inCanvas).catch(() => false)
+    if (ok) return true
+    const error = await app.evaluate(`document.querySelector('.canvas-error')?.textContent ?? ''`).catch(() => '')
+    if (!error || fix >= tries) return false
+    log(`canvas error, pressing Fix with the model (${fix + 1}/${tries}): ${error.slice(0, 120)}`)
+    const before = readLibrary().items[0]?.versions.length ?? 0
+    await app.evaluate(`document.querySelector('.canvas-error .btn')?.click()`)
+    const until = Date.now() + 600_000
+    while ((readLibrary().items[0]?.versions.length ?? 0) <= before && Date.now() < until) await sleep(1000)
+    await app.waitFor('the app to go idle', IDLE, 60_000)
+    await sleep(1500)
+  }
+}
+
+/** A small model fails some attempts (loops, no file); retry the way a user would. */
+async function generateWithRetry(app, text, { expectAsk }, tries = 3) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await generate(app, text, { expectAsk: expectAsk && attempt === 1 })
+      results.steps.push({ name: `generated in ${attempt} attempt(s)`, ok: true, detail: text.slice(0, 40) })
+      return
+    } catch (err) {
+      if (!/generation ended without a version/.test(err.message) || attempt >= tries) throw err
+      log(`attempt ${attempt} failed (${err.message.slice(0, 140)}); retrying`)
+    }
+  }
+}
+
 async function generate(app, text, { expectAsk }) {
-  const versionsBefore = readLibrary().items[0]?.versions.length ?? 0
+  // A new item goes to the top of the library; a refinement adds to the top one.
+  const before = readLibrary().items[0]
+  const topBefore = before?.id
+  const versionsBefore = before?.versions.length ?? 0
   await app.waitFor('the composer', `(${IDLE}) && !!document.querySelector('.composer textarea')`, 120_000)
   await app.waitFor('the model to be ready', `!document.querySelector('.composer textarea')?.placeholder.includes('model')`, 180_000)
   step(`type: ${text.slice(0, 40)}…`, await app.evaluate(TYPE_AND_SEND(text)))
@@ -211,9 +298,10 @@ async function generate(app, text, { expectAsk }) {
   const until = Date.now() + 600_000
   for (;;) {
     const item = readLibrary().items[0]
+    const fresh = item && item.id !== topBefore
     const last = item?.turns.at(-1)
-    if (item && item.versions.length > versionsBefore) break
-    if (last?.role === 'assistant' && (last.error || last.text === 'Stopped.')) {
+    if (item && item.versions.length > (fresh ? 0 : versionsBefore)) break
+    if ((fresh || item?.turns.length > (before?.turns.length ?? 0)) && last?.role === 'assistant' && (last.error || last.text === 'Stopped.')) {
       throw new Error(`generation ended without a version: ${last.error ?? last.text}`)
     }
     if (Date.now() > until) throw new Error('Timed out waiting for the generation to finish')
@@ -223,11 +311,14 @@ async function generate(app, text, { expectAsk }) {
   await sleep(1500)
 }
 
+/** The app's library, read from its SQLite database (WAL: safe while the app writes). */
 function readLibrary() {
+  if (!fs.existsSync(path.join(HOME, 'jemero.db'))) return { items: [] }
+  const lib = openLibrary(HOME)
   try {
-    return JSON.parse(fs.readFileSync(path.join(HOME, 'library.json'), 'utf8'))
-  } catch {
-    return { items: [] }
+    return lib.load()
+  } finally {
+    lib.close()
   }
 }
 
@@ -244,27 +335,25 @@ async function main() {
   log(`work folder ${WORK}`)
 
   // Run 1: online.
+  if (APP) packHost = await startStaticServer(path.join(ROOT, 'packs-dist'))
   let child = launch({ offline: false })
   let app = await connect()
   try {
-    await generate(app, PROMPT, { expectAsk: true })
-    const lib = JSON.parse(fs.readFileSync(path.join(HOME, 'library.json'), 'utf8'))
+    await generateWithRetry(app, PROMPT, { expectAsk: true })
+    const lib = readLibrary()
     const version = lib.items[0]?.versions.at(-1)
     step('a version was saved', !!version, (await app.evaluate(LAST_ERROR)) || '')
     step('it imports katex', /from\s*['"]katex['"]/.test(Object.values(version.files).join('\n')))
     step('its lock records KaTeX 0.18.7', version.packs?.packs?.katex === '0.18.7', JSON.stringify(version.packs))
     const installed = JSON.parse(fs.readFileSync(path.join(HOME, 'packs', 'installed.json'), 'utf8')).packs
     step('KaTeX is installed and active', installed.katex?.version === '0.18.7')
-    const k = await app.waitFor('KaTeX in the canvas', CANVAS_KATEX, 60_000, app.inCanvas).catch(async (err) => {
-      results.diagnosis = await app.diagnose()
-      log(JSON.stringify(results.diagnosis, null, 2))
-      throw err
-    })
+    const k = await katexAfterFixes(app)
     step('the preview renders KaTeX with its local fonts', k.spans > 0 && k.fontsLoaded, JSON.stringify(k))
     results.online = k
   } finally {
     app.close()
     await quit(child)
+    await packHost?.close()
   }
 
   // Run 2: restarted, network off.
@@ -276,14 +365,30 @@ async function main() {
   try {
     const k = await app.waitFor('KaTeX in the reopened component', CANVAS_KATEX, 120_000, app.inCanvas)
     step('offline after restart: the saved component renders KaTeX', k.spans > 0 && k.fontsLoaded, JSON.stringify(k))
-    await generate(app, REFINE, { expectAsk: false })
-    const lib = JSON.parse(fs.readFileSync(path.join(HOME, 'library.json'), 'utf8'))
+    await generateWithRetry(app, REFINE, { expectAsk: false })
+    const lib = readLibrary()
     const version = lib.items[0].versions.at(-1)
     step('offline refinement saved a new version', lib.items[0].versions.length >= 2, (await app.evaluate(LAST_ERROR)) || '')
     step('it still uses KaTeX 0.18.7', version.packs?.packs?.katex === '0.18.7', JSON.stringify(version.packs))
-    const k2 = await app.waitFor('KaTeX after refining offline', CANVAS_KATEX, 60_000, app.inCanvas)
+    const k2 = await katexAfterFixes(app)
     step('offline refinement renders KaTeX', k2.spans >= 1 && k2.fontsLoaded, JSON.stringify(k2))
     results.offline = k2
+
+    // A block and a section, built from scratch while offline.
+    for (const [kind, text] of [
+      ['block', 'A sign-in form with email, password, a remember-me checkbox and a submit button'],
+      ['section', 'A pricing section with three plans, a highlighted middle plan and a feature list each'],
+    ]) {
+      await app.evaluate(`document.querySelector('.rail-btn[aria-label="New chat"]').click()`)
+      await app.waitFor('the start screen', `!!document.querySelector('.start .kind-switch')`, 20_000)
+      await app.evaluate(`[...document.querySelectorAll('.start .kind-switch .seg')].find((b) => b.textContent.toLowerCase() === '${kind}')?.click()`)
+      await sleep(300)
+      await generateWithRetry(app, text, { expectAsk: false })
+      const item = readLibrary().items[0]
+      step(`offline ${kind} saved`, item?.kind === kind && item.versions.length > 0, item?.name)
+      const rendered = await renderedAfterFixes(app)
+      step(`offline ${kind} renders`, rendered, item?.name)
+    }
   } finally {
     app.close()
     await quit(child)

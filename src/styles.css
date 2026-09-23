@@ -876,3 +876,23 @@ textarea.code.editor:focus { outline: none; border: 0; }
 .model-filters select { font: inherit; color: var(--text); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; }
 .model-filters > span { margin-left: auto; }
 .model-row .btn:disabled { cursor: not-allowed; }
+
+/* --- offline ready, setup, resources ------------------------------------- */
+.offline-check { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 18px; background: var(--panel); }
+.offline-check.ready { border-color: var(--accent); }
+.offline-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.offline-check.ready .offline-head strong { color: var(--accent-text); }
+.offline-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.offline-rows li { display: grid; grid-template-columns: 16px minmax(90px, 160px) 1fr auto; align-items: center; gap: 8px; font-size: 12.5px; }
+.offline-mark { text-align: center; color: var(--muted); }
+.offline-rows li.ok .offline-mark { color: var(--accent-text); }
+.offline-rows li.bad .offline-mark { color: var(--bad-text); }
+.offline-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.offline-detail { color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+/* The sample canvas renders for real, just out of sight. */
+.offline-stage { position: fixed; left: -10000px; top: 0; width: 480px; height: 320px; pointer-events: none; }
+.setup-choice { cursor: pointer; }
+.setup-choice input { margin: 0 4px 0 0; accent-color: var(--accent); }
+.setup-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.btn.danger { background: var(--bad); }

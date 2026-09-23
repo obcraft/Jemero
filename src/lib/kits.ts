@@ -17,6 +17,11 @@ export type Kit = {
   autoImport: (manifest: Manifest) => string[]
   /** The kit's part of the system prompt. */
   prompt: (manifest: Manifest) => string
+  /**
+   * The same for small models (≤ 4B): names only, no import lines to copy.
+   * The compiler adds the imports itself (compile.ts, addMissingImports).
+   */
+  compactPrompt?: (manifest: Manifest) => string
 }
 
 export type Manifest = {
@@ -75,6 +80,10 @@ export const KITS: Kit[] = [
     blurb: 'Radix primitives styled with Tailwind',
     tailwind: true,
     autoImport: (m) => [...uiModules(m), '@/lib/utils'],
+    compactPrompt: (m) => `KIT: shadcn/ui with Tailwind CSS v4. Use its components by name and write NO import lines for them,
+nor for React hooks or lucide icons: they are added for you. Only packs listed below need an import.
+Components: ${[...new Set(uiModules(m).flatMap((s) => m.exports[s].filter((n) => n !== 'default' && !/Variants$/.test(n)).slice(0, 4)))].join(', ')}.
+- ${TOKENS}`,
     prompt: (m) => `KIT: shadcn/ui (Radix + Tailwind CSS v4). Every component below is installed. Import from these paths:
 ${uiModules(m)
   // A few names per module, not all of them: a full list reads like a

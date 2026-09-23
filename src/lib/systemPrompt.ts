@@ -69,11 +69,15 @@ export function buildSystem(opts: {
   review?: boolean
   /** Installed packs chosen for this request: their exact imports and exports. */
   packs?: { id: string; pack: InstalledPack }[]
+  /** A small model: the kit's compact brief, without import lines to copy. */
+  compact?: boolean
 }): string {
+  const kit = kitById(opts.kit)
+  const kitBrief = opts.compact && kit.compactPrompt ? kit.compactPrompt(opts.manifest) : kit.prompt(opts.manifest)
   const format = opts.review ? '' : opts.plan ? FORMAT_WITH_PLAN : FORMAT_NO_PLAN
   // The offline rule sits with the brief, not last: placed at the very end it
   // made small models (Qwen2.5-Coder 1.5B) stop after echoing the request.
-  return [opts.base.trim(), format, `${KIND_BRIEF[opts.kind]} ${BOUNDARY}`, kitById(opts.kit).prompt(opts.manifest), packBrief(opts.packs ?? [])]
+  return [opts.base.trim(), format, `${KIND_BRIEF[opts.kind]} ${BOUNDARY}`, kitBrief, packBrief(opts.packs ?? [])]
     .filter(Boolean)
     .join('\n\n')
 }

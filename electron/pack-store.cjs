@@ -345,6 +345,28 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
     return { ok: true }
   }
 
+  /**
+   * Go back to the version that was active before the last update. It must
+   * still be on disk and verify; installed.json is replaced by rename, so the
+   * switch is atomic like an activation.
+   */
+  async function rollback(id) {
+    const all = await installed()
+    const active = all[id]
+    if (!active?.previous) return { ok: false, reason: 'There is no earlier version to go back to.' }
+    const dir = packDir(id, active.previous)
+    try {
+      const manifest = signing.verify(JSON.parse(await fsp.readFile(path.join(dir, 'manifest.signed.json'), 'utf8')), trust)
+      const problems = verifyPackDir(path.join(dir, 'files'), manifest)
+      if (problems.length) return { ok: false, reason: `The earlier version is damaged: ${problems[0]}` }
+    } catch (err) {
+      return { ok: false, reason: `The earlier version can’t be used: ${explain(err, id)}` }
+    }
+    all[id] = { version: active.previous, previous: active.version, activatedAt: new Date().toISOString() }
+    await writeJsonAtomic(installedFile, { formatVersion: FORMAT_VERSION, packs: all })
+    return { ok: true, version: active.previous }
+  }
+
   /** The active version's signed manifest, verified, and where its files are. Null when not installed. */
   async function activeManifest(id) {
     const active = (await installed())[id]
@@ -368,7 +390,7 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
     }
   }
 
-  return { root, sourceUrl: base, catalog, installed, install, cancel, remove, verifyInstalled, activeManifest, packDir }
+  return { root, sourceUrl: base, catalog, installed, install, cancel, remove, rollback, verifyInstalled, activeManifest, packDir }
 }
 
 module.exports = { createPackStore, PackError }

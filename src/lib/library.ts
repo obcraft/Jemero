@@ -2,9 +2,10 @@
 // the conversation that shaped it. One small store read through
 // useSyncExternalStore, like settings.ts.
 //
-// In the Mac app it lives in a file the main process owns (library.json next to
-// settings.json), because the page's origin, and with it localStorage, changes
-// on every launch. The browser build keeps it in localStorage.
+// In the Mac app it lives in SQLite, owned by the main process
+// (electron/library-db.cjs, jemero.db), because the page's origin, and with it
+// localStorage, changes on every launch. Files a generation is still writing
+// are saved there too, as drafts. The browser build keeps it in localStorage.
 import { useSyncExternalStore } from 'react'
 import type { KitId } from './kits'
 import type { PackLock } from './packs'
@@ -92,15 +93,78 @@ function writeNow() {
 /** Edits arrive per keystroke in the code tab; writing once they settle is plenty. */
 function persist() {
   clearTimeout(saveTimer)
-  saveTimer = setTimeout(writeNow, 400)
+  saveTimer = setTimeout(writeNow, 150)
 }
 
 // Don't lose the last edit to the debounce when the window closes.
 window.addEventListener('beforeunload', () => {
+  flushDraft()
   if (saveTimer === undefined) return
   clearTimeout(saveTimer)
   writeNow()
 })
+
+// --- drafts: a generation's files, saved as the model writes them ----------
+
+type DraftFile = { path: string; content: string; complete: boolean }
+let draftTimer: ReturnType<typeof setTimeout> | undefined
+let draftPending: { itemId: string; files: DraftFile[] } | null = null
+
+function flushDraft() {
+  clearTimeout(draftTimer)
+  draftTimer = undefined
+  if (draftPending) window.jemero?.library?.draft(draftPending.itemId, draftPending.files)
+  draftPending = null
+}
+
+/** Save the files being written now; at most a few writes a second. */
+export function saveDraft(itemId: string, files: DraftFile[]) {
+  draftPending = { itemId, files: files.map((f) => ({ path: f.path, content: f.content, complete: f.complete })) }
+  draftTimer ??= setTimeout(flushDraft, 300)
+}
+
+/** The version is saved: the draft has done its job. */
+export function clearDraft(itemId: string) {
+  clearTimeout(draftTimer)
+  draftTimer = undefined
+  draftPending = null
+  window.jemero?.library?.clearDraft(itemId)
+}
+
+/**
+ * Drafts left by a crash or a quit mid-generation come back as a version, so
+ * no written code is lost. Only finished files are kept as the version; a
+ * file cut off mid-way would just fail to compile.
+ */
+export async function recoverDrafts(): Promise<number> {
+  const drafts = (await window.jemero?.library?.drafts()) ?? {}
+  let recovered = 0
+  for (const [itemId, files] of Object.entries(drafts)) {
+    const item = current.items.find((i) => i.id === itemId)
+    const done = files.filter((f) => f.complete)
+    const newest = Math.max(...files.map((f) => f.updatedAt))
+    const last = item?.versions.at(-1)
+    if (item && done.length && (!last || last.createdAt < newest)) {
+      const base = last?.files ?? {}
+      const merged = { ...base, ...Object.fromEntries(done.map((f) => [f.path, f.content])) }
+      const entry = done.find((f) => /\bexport\s+default\b/.test(f.content))?.path ?? last?.entry ?? done[0].path
+      const n = addVersion(itemId, {
+        files: merged,
+        entry,
+        kit: last?.kit ?? 'shadcn',
+        packs: last?.packs,
+        plan: '',
+        prompt: 'Recovered after Jemero closed mid-generation',
+        mode: 'edit',
+        createdAt: Date.now(),
+      })
+      addTurn(itemId, { role: 'assistant', mode: 'edit', text: 'Recovered the code written before Jemero closed.', version: n })
+      recovered++
+    }
+    window.jemero?.library?.clearDraft(itemId)
+  }
+  return recovered
+}
 
 function commit(next: Library) {
   current = next

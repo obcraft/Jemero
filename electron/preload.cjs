@@ -18,6 +18,11 @@ contextBridge.exposeInMainWorld('jemero', {
   library: {
     load: () => ipcRenderer.sendSync('library:load'),
     save: (value) => ipcRenderer.send('library:save', value),
+    /** Files of a generation in progress, saved as they're written. */
+    draft: (itemId, files) => ipcRenderer.send('library:draft', itemId, files),
+    clearDraft: (itemId) => ipcRenderer.send('library:clear-draft', itemId),
+    /** Unfinished drafts, by item: what a crash or quit left behind. */
+    drafts: () => invoke('library:drafts'),
   },
   /** Machine profile: chip, unified memory, GPU cores, bandwidth, model budget. */
   device: () => invoke('models:device'),
@@ -43,6 +48,8 @@ contextBridge.exposeInMainWorld('jemero', {
     install: (id) => invoke('packs:install', id),
     cancel: (id) => invoke('packs:cancel', id),
     remove: (id) => invoke('packs:remove', id),
+    /** Back to the version active before the last update. */
+    rollback: (id) => invoke('packs:rollback', id),
     onProgress: (fn) => {
       const listener = (_event, payload) => fn(payload)
       ipcRenderer.on('packs:progress', listener)

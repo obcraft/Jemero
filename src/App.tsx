@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { listModels, ping, streamChat } from './lib/llm'
+import { listModels, ping, streamChat, type ChatMessage } from './lib/llm'
 import { parseArtifacts, type ParsedFile } from './lib/parser'
 import { compile, isScript, pickEntry, type Compiled } from './lib/compile'
 import { kitById, withPacks, loadManifest, type KitId, type Manifest } from './lib/kits'
 import {
   addTurn,
   addVersion,
+  clearDraft,
   createItem,
   deleteItem,
   displayName,
   findItem,
   getLibrary,
   provisionalName,
+  recoverDrafts,
+  saveDraft,
   updateItem,
   useLibrary,
   type Kind,
@@ -36,6 +39,7 @@ import ModelMenu from './components/ModelMenu'
 import SettingsPage from './components/SettingsPage'
 import QuantizeDialog from './components/QuantizeDialog'
 import ResourcesPage from './components/ResourcesPage'
+import SetupPage from './components/SetupPage'
 import {
   installedKey,
   installedPacks,
@@ -67,6 +71,25 @@ const PHASE_LABEL: Record<Exclude<Phase, 'idle'>, string> = {
 
 const formatBytes = (b: number) =>
   b >= 1024 ** 2 ? `${(b / 1024 ** 2).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`
+
+/** 4B parameters or fewer, read from the model id ("Qwen2.5-Coder-1.5B-Instruct-Q8_0"). */
+function isSmallModel(id: string): boolean {
+  const b = /(?:^|[^\d.])(\d+(?:\.\d+)?)\s*B(?![a-z])/i.exec(id.split('/').pop() ?? '')
+  const m = /(?:^|[^\d.])(\d+)\s*M(?![a-z])/i.exec(id.split('/').pop() ?? '')
+  if (b) return Number(b[1]) <= 4
+  return !!m
+}
+
+/** A file name for a component the model didn't name: the current entry, or the request in PascalCase. */
+function fileNameFor(entry: string | undefined, request: string): string {
+  if (entry) return entry
+  const words = request.match(/[A-Za-z][a-z]*/g)?.filter((w) => !/^(a|an|the|that|with|and|of|for|to|in|on)$/i.test(w)) ?? []
+  const base = words.slice(0, 3).map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join('')
+  return `${base || 'Component'}.jsx`
+}
+
+/** How many times a file cut off by the answer length is continued before giving up. */
+const CONTINUATIONS = 2
 
 /** Re-parsing the whole stream on every token is O(n²); 70 ms still feels live. */
 const PARSE_INTERVAL_MS = 70
@@ -210,8 +233,9 @@ export default function App() {
   // The shell opens the app at #models when nothing is downloaded yet, so a
   // first run lands on the browser rather than on a chat that can't answer.
   /** A full page in place of the library and workspace, opened from the rail. */
-  const [page, setPage] = useState<'models' | 'settings' | 'resources' | null>(() =>
-    window.location.hash === '#models' ? 'models' : window.location.hash === '#settings' ? 'settings' : null,
+  const [page, setPage] = useState<'models' | 'settings' | 'resources' | 'setup' | null>(() =>
+    // First launch: setup (a model and packs) before anything else.
+    !settings.setupDone ? 'setup' : window.location.hash === '#models' ? 'models' : window.location.hash === '#settings' ? 'settings' : null,
   )
   const [menuOpen, setMenuOpen] = useState(false)
   const modelBtn = useRef<HTMLButtonElement>(null)
@@ -242,6 +266,7 @@ export default function App() {
   const [draftDone, setDraftDone] = useState<{ itemId: string; files: ParsedFile[]; kit: KitId } | null>(null)
   const [thought, setThought] = useState('')
   const abort = useRef<AbortController | null>(null)
+  const startedAt = useRef(0)
   const running = useRef<{ itemId: string; mode: Mode } | null>(null)
   const composer = useRef<HTMLTextAreaElement>(null)
 
@@ -328,8 +353,12 @@ export default function App() {
       }
       if (cancelled) return
       setBootStep('Loading components…')
-      await Promise.all([loadManifest().catch(() => undefined), loadInstalledPacks()])
-      if (!cancelled) setBooted(true)
+      await Promise.all([loadManifest().catch(() => undefined), loadInstalledPacks(), recoverDrafts().catch(() => 0)])
+      if (cancelled) return
+      // Known before anything compiles: otherwise a saved component that uses a
+      // pack is compiled once against an empty pack list and reports it missing.
+      setInstalled(installedPacks())
+      setBooted(true)
     }
     void boot()
     return () => {
@@ -413,13 +442,13 @@ export default function App() {
 
   const compiled = useMemo<Compiled | null>(
     () =>
-      compileInput && packManifest
+      booted && compileInput && packManifest
         ? compile(compileInput.files, compileInput.entry, compileInput.kit, packManifest, {
             repair: settings.autoFixImports,
             missingPacks,
           })
         : null,
-    [compileInput, packManifest, missingPacks, settings.autoFixImports],
+    [booted, compileInput, packManifest, missingPacks, settings.autoFixImports],
   )
 
   // The canvas keeps showing the last version that compiled while the current
@@ -628,6 +657,7 @@ export default function App() {
 
       const controller = new AbortController()
       abort.current = controller
+      startedAt.current = performance.now()
       running.current = { itemId, mode }
       setThought('')
       setPhase(mode === 'review' ? 'reviewing' : 'thinking')
@@ -660,6 +690,7 @@ export default function App() {
         plan: settings.planFirst,
         review: mode === 'review',
         packs: chosenPacks,
+        compact: isSmallModel(model),
       })
       if (mode !== 'review') setPhase('thinking')
 
@@ -681,45 +712,88 @@ export default function App() {
             doneSig = sig
             setDraftDone({ itemId, files: done, kit })
           }
+          // Every file as it's written, saved to the library database.
+          saveDraft(itemId, p.files)
         } else if (p.plan) {
           setPhase((ph) => (ph === 'thinking' ? 'planning' : ph))
         }
       }
 
       try {
-        await streamChat({
-          model,
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: request },
-          ],
-          temperature: settings.temperature,
-          topP: settings.topP,
-          maxTokens: maxTokensFor(settings),
-          thinking: settings.thinking,
-          signal: controller.signal,
-          onThought: settings.showReasoning ? (t) => setThought((prev) => (prev + t).slice(-4000)) : undefined,
-          onToken: (token) => {
-            raw += token
-            if (!broken && (DEGENERATE.test(raw.slice(-64)) || (token.includes('\n') && repeatingBlock(raw)))) {
-              // Record first, then abort: a plain abort is the user pressing
-              // Stop and stays quiet, which would hide this.
-              broken = new Error(
-                DEGENERATE.test(raw.slice(-64))
-                  ? `The model started repeating “${raw.slice(-1)}” endlessly. Its output is broken, not slow. ` +
-                      'Switch to another model from the header; if this one keeps doing it, delete and re-download it.'
-                  : 'The model got stuck writing the same lines over and over, so it was stopped. Try again, ' +
-                      'or use a larger model: small ones loop more often.',
-              )
-              controller.abort()
-              return
-            }
-            const now = performance.now()
-            if (now - lastParse < PARSE_INTERVAL_MS) return
-            lastParse = now
-            flush()
-          },
-        })
+        const onToken = (token: string) => {
+          raw += token
+          if (!broken && (DEGENERATE.test(raw.slice(-64)) || (token.includes('\n') && repeatingBlock(raw)))) {
+            // Record first, then abort: a plain abort is the user pressing
+            // Stop and stays quiet, which would hide this.
+            broken = new Error(
+              DEGENERATE.test(raw.slice(-64))
+                ? `The model started repeating “${raw.slice(-1)}” endlessly. Its output is broken, not slow. ` +
+                    'Switch to another model from the header; if this one keeps doing it, delete and re-download it.'
+                : 'The model got stuck writing the same lines over and over, so it was stopped. Try again, ' +
+                    'or use a larger model: small ones loop more often.',
+            )
+            controller.abort()
+            return
+          }
+          const now = performance.now()
+          if (now - lastParse < PARSE_INTERVAL_MS) return
+          lastParse = now
+          flush()
+        }
+        const ask = (messages: ChatMessage[], handle: (t: string) => void) =>
+          streamChat({
+            model,
+            messages,
+            temperature: settings.temperature,
+            topP: settings.topP,
+            maxTokens: maxTokensFor(settings),
+            thinking: settings.thinking,
+            signal: controller.signal,
+            onThought: settings.showReasoning ? (t) => setThought((prev) => (prev + t).slice(-4000)) : undefined,
+            onToken: handle,
+          })
+        const messages: ChatMessage[] = [
+          { role: 'system', content: system },
+          { role: 'user', content: request },
+        ]
+        await ask(messages, onToken)
+
+        // No file at all (small models sometimes restate the request and stop):
+        // open the file for the model and let it write from there.
+        if (!broken && mode !== 'review' && !parseArtifacts(raw).files.length && !controller.signal.aborted) {
+          const name = fileNameFor(base?.entry, text)
+          const prefix = `${raw.trimEnd()}\n<file path="${name}">\n`
+          raw = prefix
+          flush()
+          let pending = ''
+          let past = false
+          await ask([...messages, { role: 'assistant', content: prefix }], (token) => {
+            if (past) return onToken(token)
+            pending += token
+            if (pending.length < prefix.length && prefix.startsWith(pending)) return
+            past = true
+            onToken(pending.startsWith(prefix) ? pending.slice(prefix.length) : pending)
+          })
+        }
+
+        // Cut off in the middle of a file: keep what's written and let the
+        // model carry on from that exact point (its reply so far goes back as
+        // the start of its answer), rather than throwing the work away.
+        for (let more = 0; more < CONTINUATIONS && !broken; more++) {
+          const last = parseArtifacts(raw).files.at(-1)
+          if (!last || last.complete) break
+          const prefix = raw
+          // The server streams the prefix back before the new text; skip that echo.
+          let pending = ''
+          let past = false
+          await ask([...messages, { role: 'assistant', content: prefix }], (token) => {
+            if (past) return onToken(token)
+            pending += token
+            if (pending.length < prefix.length && prefix.startsWith(pending)) return
+            past = true
+            onToken(pending.startsWith(prefix) ? pending.slice(prefix.length) : pending)
+          })
+        }
         flush()
         if (broken) throw broken
 
@@ -750,6 +824,7 @@ export default function App() {
           mode,
           createdAt: Date.now(),
         })
+        clearDraft(itemId)
         updateItem(itemId, (it) => ({ ...it, name: displayName(merged.entry) }))
         addTurn(itemId, { role: 'assistant', mode, text: p.prose, plan: p.plan || undefined, version: number })
         setViewed((v) => ({ ...v, [itemId]: number }))
@@ -771,10 +846,12 @@ export default function App() {
     [model, manifest, selectedId, viewed, newKind, settings, resolvePacks],
   )
 
-  const cancel = useCallback(() => {
+  const cancel = useCallback((e?: { type?: string }) => {
     const controller = abort.current
     const run = running.current
     if (!controller) return
+    // Send and Stop are the same button: a double-click on Send must not stop what it just started.
+    if (e?.type === 'click' && performance.now() - startedAt.current < 600) return
     console.info('[generate] stopped by the user', new Error().stack?.split('\n').slice(2, 5).join(' | '))
     controller.abort()
     if (run) addTurn(run.itemId, { role: 'assistant', mode: run.mode, text: 'Stopped.' })
@@ -783,7 +860,7 @@ export default function App() {
   // Esc stops whatever is running.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') cancel()
+      if (e.key === 'Escape') cancel(e)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -1003,7 +1080,7 @@ export default function App() {
         </div>
       </header>
 
-      <QuantizeDialog />
+      {settings.setupDone && page !== 'setup' && <QuantizeDialog />}
 
       <div className={`body${page ? ' on-page' : !item ? ' on-start' : ''}`}>
         <nav className="rail" aria-label="Main">
@@ -1047,7 +1124,25 @@ export default function App() {
           </button>
         </nav>
         {page === 'settings' && <SettingsPage onClose={() => setPage(null)} />}
-        {page === 'resources' && <ResourcesPage onClose={() => setPage(null)} />}
+        {page === 'resources' && (
+          <ResourcesPage
+            items={library.items}
+            installed={installed}
+            manifest={packManifest}
+            onOpenModels={() => setPage('models')}
+            onClose={() => setPage(null)}
+          />
+        )}
+        {page === 'setup' && (
+          <SetupPage
+            packs={packCatalog}
+            installed={installed}
+            items={library.items}
+            manifest={packManifest}
+            onDone={() => setPage(null)}
+            onOpenModels={() => setPage('models')}
+          />
+        )}
         {page === 'models' && (
           <ModelBrowser
             open

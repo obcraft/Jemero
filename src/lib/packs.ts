@@ -107,6 +107,7 @@ export type PackBridge = {
   install(id: string): Promise<PackResult>
   cancel(id: string): Promise<{ ok: boolean }>
   remove(id: string): Promise<PackResult>
+  rollback(id: string): Promise<PackResult & { version?: string }>
   onProgress(fn: (p: PackProgress) => void): () => void
   /** A pack was activated or removed. */
   onChanged(fn: () => void): () => void

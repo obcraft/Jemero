@@ -238,6 +238,42 @@ function boundNames(code: string): Set<string> {
 }
 
 /**
+ * Drops imports the file never uses, and repeats of a name already imported.
+ * Small models paste the kit's whole component list, or packages that aren't
+ * here, at the top of every file; an import nothing reads can't be needed, so
+ * removing it is safe and saves a failed render. `react` is left alone.
+ */
+function pruneUnusedImports(code: string): { code: string; dropped: string[] } {
+  const body = code.replace(ANY_IMPORT, '')
+  const used = (name: string) => new RegExp(`(?<![\\w$])${name.replace(/\$/g, '\\$')}(?![\\w$])`).test(body)
+  const seen = new Set<string>()
+  const dropped: string[] = []
+  const out = code.replace(IMPORT_STMT, (stmt: string, rawClause: string) => {
+    const spec = /from\s*['"]([^'"\n]+)['"]/.exec(stmt)?.[1] ?? ''
+    if (spec === 'react' || spec.startsWith('.')) return stmt
+    const c = parseClause(rawClause)
+    const keep = (local: string | null) => {
+      if (!local) return false
+      if (seen.has(local) || !used(local)) {
+        dropped.push(local)
+        return false
+      }
+      seen.add(local)
+      return true
+    }
+    const next: Clause = {
+      def: keep(c.def) ? c.def : null,
+      ns: keep(c.ns) ? c.ns : null,
+      named: c.named.filter((n) => keep(n.local)),
+    }
+    if (!next.def && !next.ns && !next.named.length) return ''
+    const indent = /^[ \t]*/.exec(stmt)?.[0] ?? ''
+    return `${indent}import ${printClause(next)} from '${spec}'`
+  })
+  return { code: out, dropped }
+}
+
+/**
  * Adds the imports a file forgot: React hooks, the kit's components, lucide
  * icons. A name only counts as missing when nothing in the file binds it, so a
  * local component called Button is never shadowed by the kit's. (One bound in a
@@ -322,6 +358,10 @@ function resolveRelative(from: string, spec: string, files: Record<string, strin
 function syntaxMessage(path: string, source: string, err: Error): string {
   const text = err.message.replace(/^Error transforming [^:]+:\s*/, '')
   const at = text.match(/\((\d+):(\d+)\)\s*$/)
+  // The parser itself fell over on badly broken code: say that, not its internals.
+  if (err instanceof TypeError || /Cannot read properties of undefined/.test(text)) {
+    return `Syntax error in ${path}: the file is too broken to parse (unbalanced brackets or JSX, or a cut-off line). Ask for it again.`
+  }
   if (!at) return `Syntax error in ${path}: ${text}`
   const line = Number(at[1])
   const col = Number(at[2])
@@ -375,6 +415,28 @@ export function compile(
 
     let code = source
     if (repair) {
+      // Only markup, no component around it (small models do this, sometimes
+      // on the same line as an import): keep the imports, make the markup the Preview.
+      const head = /^(?:\s*import\s[^;\n]*?from\s*['"][^'"\n]+['"];?)*/.exec(code)?.[0] ?? ''
+      const bare = code.slice(head.length).trim()
+      if (bare.startsWith('<') && !/^\s*export\b/m.test(bare) && !/\bfunction\b|=>/.test(bare.replace(/\{[^{}]*\}/g, ''))) {
+        code = `${head.trim().replace(/;?\s*import\s/g, (m, i) => (i ? ';\nimport ' : m))}\n\nexport default function Preview() {\n  return (\n    <>\n${bare}\n    </>\n  )\n}\n`
+        notes.push({ level: 'info', text: `${path}: the file was only markup; wrapped it in a Preview component` })
+      } else if (path === entry && !/\bexport\s+default\b/.test(code)) {
+        // A component defined but never exported: the last one is the one to show.
+        const names = [...code.matchAll(/^(?:export\s+)?(?:function\s+([A-Z][\w$]*)\s*\(|const\s+([A-Z][\w$]*)\s*=)/gm)].map((m) => m[1] ?? m[2])
+        const last = names.at(-1)
+        if (last) {
+          code = `${code.trimEnd()}\n\nexport default ${last}\n`
+          notes.push({ level: 'info', text: `${path}: nothing was exported by default; exported ${last}` })
+        }
+      }
+      const pruned = pruneUnusedImports(code)
+      if (pruned.dropped.length) {
+        const shown = [...new Set(pruned.dropped)]
+        notes.push({ level: 'info', text: `${path}: removed unused imports: ${shown.slice(0, 8).join(', ')}${shown.length > 8 ? ` and ${shown.length - 8} more` : ''}` })
+      }
+      code = pruned.code
       const fixed = addMissingImports(code, candidates, icons)
       if (fixed.added.length) notes.push({ level: 'info', text: `${path}: added missing imports for ${fixed.added.join(', ')}` })
       code = fixed.code
@@ -482,6 +544,17 @@ export function compile(
             mod = root
           } else {
             const pkg = packageOf(mod)
+            // Kit components imported from a package that isn't here ('shadcn',
+            // '@radix-ui/react-button', …): point each name at the kit module that has it.
+            const homes = repair && !out.def && !out.ns && out.named.length ? out.named.map((n) => candidates.get(n.imported)) : []
+            if (homes.length && homes.every(Boolean)) {
+              const byHome = new Map<string, { imported: string; local: string }[]>()
+              out.named.forEach((n, i) => byHome.set(homes[i]!, [...(byHome.get(homes[i]!) ?? []), n]))
+              notes.push({ level: 'info', text: `${path}: "${spec}" isn't installed; took ${out.named.map((n) => n.imported).join(', ')} from the kit` })
+              return [...byHome]
+                .map(([home, named]) => `${indent}${keyword}${gap}${printClause({ def: null, ns: null, named })}${from}${quote}${home}${quote}`)
+                .join('\n')
+            }
             const pack = missingPacks[mod] ?? missingPacks[pkg]
             if (pack) {
               throw new CompileError(
@@ -514,8 +587,17 @@ export function compile(
           notes.push({ level: 'info', text: `${path}: ${mod} has no default export, imported { ${name} } instead` })
         }
 
-        out.named = out.named.map((n) => {
-          if (has.has(n.imported)) return n
+        // A name imported from the wrong module of the kit ({ InputOTP } from
+        // '@/components/ui/input'): move it to the module that exports it.
+        const moved = new Map<string, { imported: string; local: string }[]>()
+        out.named = out.named.flatMap((n) => {
+          if (has.has(n.imported)) return [n]
+          const home = candidates.get(n.imported)
+          if (repair && home && home !== mod) {
+            moved.set(home, [...(moved.get(home) ?? []), n])
+            notes.push({ level: 'info', text: `${path}: ${n.imported} comes from "${home}", not "${mod}"; moved it` })
+            return []
+          }
           if (mod === 'lucide-react' && repair) {
             const icon = resolveIcon(n.imported, icons)
             const chosen = icon ?? (icons.has('CircleHelp') ? 'CircleHelp' : 'Circle')
@@ -525,7 +607,7 @@ export function compile(
                 ? `${path}: lucide calls ${n.imported} “${icon}”, used that`
                 : `${path}: lucide has no ${n.imported} icon; showing ${chosen}. Name a real one when you refine.`,
             })
-            return { imported: chosen, local: n.local }
+            return [{ imported: chosen, local: n.local }]
           }
           const like = suggest(n.imported, exported)
           throw new CompileError(
@@ -538,7 +620,11 @@ export function compile(
         if (foreign) notes.push({ level: 'warn', text: `${path} imports ${mod}, but this component uses ${kit.name}; it may not render right.` })
 
         if (reexportAll) return `${indent}export * from ${quote}${mod}${quote}`
-        return `${indent}${keyword}${gap}${printClause(out)}${from}${quote}${mod}${quote}`
+        const extra = [...moved].map(
+          ([home, named]) => `${indent}${keyword}${gap}${printClause({ def: null, ns: null, named })}${from}${quote}${home}${quote}`,
+        )
+        const kept = out.def || out.ns || out.named.length ? [`${indent}${keyword}${gap}${printClause(out)}${from}${quote}${mod}${quote}`] : []
+        return [...kept, ...extra].join('\n')
       },
     )
 

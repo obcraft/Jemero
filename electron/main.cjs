@@ -13,6 +13,7 @@ const { createPackStore } = require('./pack-store.cjs')
 const { startStaticServer } = require('./static-server.cjs')
 const { createPackRoutes } = require('./pack-routes.cjs')
 const { installNetGuard, guardFetch } = require('./net-guard.cjs')
+const { openLibrary } = require('./library-db.cjs')
 
 // Every external request is recorded; JEMERO_OFFLINE=1 refuses them as an
 // unplugged network would (the offline check runs with it).
@@ -305,12 +306,51 @@ function registerPackIpc() {
     }
     return { runtime: runtimeCheck, model: modelCheck, packs: packChecks }
   })
+  ipcMain.handle('packs:rollback', async (_e, id) => {
+    const res = await (await packs()).rollback(id)
+    if (res.ok) await packsChanged()
+    return res
+  })
   ipcMain.handle('packs:cancel', async (_e, id) => ({ ok: (await packs()).cancel(id) }))
   ipcMain.handle('packs:remove', async (_e, id) => {
     const res = await (await packs()).remove(id)
     if (res.ok) await packsChanged()
     return res
   })
+}
+
+/**
+ * The component library lives in SQLite (library-db.cjs): every version,
+ * file and turn, plus the files of a generation still in progress, saved as
+ * they're written. An old library.json is moved in on first launch.
+ */
+function registerLibraryIpc() {
+  const lib = openLibrary(runtime.appSupport())
+  try {
+    if (lib.migrateFromJson(path.join(runtime.appSupport(), 'library.json'))) console.log('[library] moved library.json into jemero.db')
+  } catch (err) {
+    console.error('[library] could not import library.json:', err.message)
+  }
+  ipcMain.on('library:load', (e) => {
+    try {
+      e.returnValue = lib.load()
+    } catch (err) {
+      console.error('[library] load failed:', err.message)
+      e.returnValue = null
+    }
+  })
+  const guarded = (what, fn) => (...args) => {
+    try {
+      fn(...args)
+    } catch (err) {
+      console.error(`[library] ${what} failed:`, err.message)
+    }
+  }
+  ipcMain.on('library:save', guarded('save', (_e, value) => lib.save(value)))
+  ipcMain.on('library:draft', guarded('draft', (_e, itemId, files) => lib.saveDraft(itemId, files)))
+  ipcMain.on('library:clear-draft', guarded('clear draft', (_e, itemId) => lib.clearDraft(itemId)))
+  ipcMain.handle('library:drafts', () => lib.drafts())
+  app.on('will-quit', () => lib.close())
 }
 
 function registerModelIpc() {
@@ -400,7 +440,7 @@ async function bootstrap() {
   // The preview boundary: nothing in a window may reach past loopback.
   installNetGuard(require('electron').session.defaultSession, externalLog())
   registerStoreIpc('settings', { pretty: true })
-  registerStoreIpc('library')
+  registerLibraryIpc()
   registerModelIpc()
   registerPackIpc()
   // Before ensureModel, so the model picked at launch already follows the switch.

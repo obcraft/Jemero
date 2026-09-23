@@ -40,7 +40,10 @@ API key, nothing to install.
 | **Sized to your Mac** | Jemero reads your chip and memory and marks the best model that fits, already quantized for speed. |
 | **One-click models** | 43 verified coding and general models, starting at 135M parameters, and a search that finds any chat model on Hugging Face (Gemma, Llama, Phi, Qwen…), sized for your Mac the same way. Downloads resume if interrupted and are checked against Hugging Face's SHA-256. |
 | **Any component** | Components (pickers, inputs, menus), blocks (forms, cards, panels) or full-width sections (heroes, pricing, footers). |
-| **Your UI kit** | shadcn/ui or plain Tailwind, bundled in the app. Switch kits and Jemero rebuilds the component with the new one. |
+| **Your UI kit** | shadcn/ui on Tailwind CSS, bundled in the app. |
+| **Works on a plane** | Set it up once online, then generate, refine, preview, save and reopen with no connection at all. **Offline ready** is only shown when the runtime starts, a model answers, every pack verifies and a sample renders in the canvas. |
+| **Packs** | Optional libraries (KaTeX first) the model can choose per request. Signed, hash-checked, installed atomically, served to the canvas from loopback only; the previous version is kept for rollback. |
+| **Nothing lost** | Your library lives in SQLite; every file is saved while the model is still writing it, and a cut-off answer is continued instead of thrown away. |
 | **Live canvas** | Only the component, rendered offline in milliseconds, with its states side by side, light/dark and phone/tablet/desktop widths. |
 | **Refine and review** | Plan first, then code. Ask for a review, tick the points worth fixing, apply them. Every change is a version you can go back to. |
 | **Private** | Everything happens on your Mac. Nothing you type leaves it. |
@@ -185,6 +188,9 @@ npm run dist       # → release/Jemero-arm64.dmg
 | `npm run serve` / `npm run stop` | Start / stop the model server without the window |
 | `npm run dist` | Build `release/Jemero-arm64.dmg` |
 | `npm run runtime` | Re-vendor the llama.cpp runtime into `vendor/llama` |
+| `npm run packs` | Build, check (no CDN, one React) and sign the downloadable packs into `packs-dist/` |
+| `npm run packs:keygen` | Make the pack signing key (`.keys/`, never committed) and trust it in `electron/pack-trust.json` |
+| `npm run e2e:offline` | The offline acceptance test through the real app (`JEMERO_APP=…/Jemero.app` for a packaged build) |
 | `npm run icon` / `npm run dmg:background` | Redraw the app icon / the DMG window |
 
 </details>
@@ -211,7 +217,12 @@ prompt ──► llama-server (built in, Metal) ──► <plan> + <file> ──
 | `kits/` | The canvas (`stage.html`, `stage.js`), the shadcn/ui sources and the Tailwind theme. |
 | `src/lib/compile.ts` | Adds forgotten imports, maps icon names onto lucide, rewrites deep imports, rejects what isn't installed with a message the model can act on, then transpiles with sucrase. |
 | `src/lib/systemPrompt.ts` · `kits.ts` | The brief: base rules, the kit's API notes, and the size of what's being built. Follow-ups are stateless: current code plus earlier requests. |
-| `src/lib/library.ts` | Components, versions and conversations, in `library.json`. |
+| `src/lib/library.ts` · `electron/library-db.cjs` | Components, versions, conversations and live drafts, in SQLite (`jemero.db`). |
+| `electron/pack-format.cjs` · `pack-sign.cjs` | The pack format and its validator; Ed25519-signed manifests and index. |
+| `electron/pack-store.cjs` | Downloads packs into staging with resume, verifies signature and hashes, activates atomically, rolls back. |
+| `electron/pack-routes.cjs` | `/packs/…` on the local server: verified files only, plus the combined installed-pack manifest. |
+| `electron/net-guard.cjs` | The preview boundary: blocks and records every request that isn't loopback. |
+| `src/lib/packSelect.ts` | Pass one of a generation: which packs the request needs, from the catalog when the pack server answers, from what's installed otherwise. |
 | `src/lib/llm.ts` · `parser.ts` | Streaming client; pulls `<plan>`, `<file>` and `<review>` out of the stream as it arrives. |
 
 Two details that matter:
@@ -219,7 +230,10 @@ Two details that matter:
 1. **The canvas is sandboxed.** Generated code runs in an iframe with only `allow-scripts
    allow-forms`, so it has an opaque origin: it can't reach the app, its storage or the
    model bridge. The kit bundles are served with CORS so it can still import them.
-2. **The model is proxied.** `/llm/*` → `127.0.0.1:8757/v1/*`, in both the dev server and
+2. **The canvas is offline by design.** Its CSP and `electron/net-guard.cjs` allow loopback
+   only: remote scripts, fonts, images and API calls are blocked and logged
+   (`logs/external-requests.jsonl`), online or not.
+3. **The model is proxied.** `/llm/*` → `127.0.0.1:8757/v1/*`, in both the dev server and
    the packaged app, which keeps requests same-origin.
 
 The model's output format:

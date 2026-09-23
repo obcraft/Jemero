@@ -86,7 +86,13 @@ export type Progress = {
 type Bridge = {
   settings: { load(): unknown; save(value: unknown): void }
   /** The component library (lib/library.ts), kept in library.json. */
-  library: { load(): unknown; save(value: unknown): void }
+  library: {
+    load(): unknown
+    save(value: unknown): void
+    draft(itemId: string, files: { path: string; content: string; complete: boolean }[]): void
+    clearDraft(itemId: string): void
+    drafts(): Promise<Record<string, { path: string; content: string; complete: boolean; updatedAt: number }[]>>
+  }
   device(): Promise<Device>
   quantization(): Promise<{ supported: boolean; reason: string | null }>
   setQuantization(on: boolean): Promise<void>

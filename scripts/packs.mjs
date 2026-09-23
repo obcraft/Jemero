@@ -43,7 +43,8 @@ const PACKS = [
   {
     id: 'katex',
     name: 'KaTeX',
-    description: 'Typesets LaTeX math formulas: katex.renderToString(tex) returns HTML to set with dangerouslySetInnerHTML.',
+    // Written as the usage itself: small models copy an example far better than they follow a description.
+    description: "LaTeX math. import katex from 'katex'; <span dangerouslySetInnerHTML={{ __html: katex.renderToString('x^2') }} />",
     recommended: true,
     category: 'components',
     package: 'katex',
