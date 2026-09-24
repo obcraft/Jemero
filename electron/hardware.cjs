@@ -97,15 +97,17 @@ function probe() {
   const budgetBytes = Math.max(0, Math.min(wired - gpuHeadroom, ramBytes - hostReserve))
 
   const hw = execFileSync('/usr/sbin/sysctl', ['-n', 'hw.model'], { encoding: 'utf8' }).trim()
+  // Once: on newer Macs naming the model runs system_profiler.
+  const machine = machineName(hw)
 
   return {
-    chip: appleSilicon ? brand : brand,
+    chip: brand,
     family,
     variant,
     appleSilicon,
     machineId: hw,
-    machine: machineName(hw),
-    isLaptop: /MacBook/.test(machineName(hw)),
+    machine,
+    isLaptop: /MacBook/.test(machine),
     ramBytes,
     ramGB: Math.round(ramBytes / GB),
     cpuCores: Number(sysctl('hw.ncpu')) || os.cpus().length,

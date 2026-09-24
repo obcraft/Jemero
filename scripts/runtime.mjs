@@ -4,7 +4,7 @@
 // Only llama-server and the libraries it links are kept; the tarball's other
 // ~40 tools would triple the bundle for nothing.
 import { createRequire } from 'node:module'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -17,9 +17,15 @@ if (process.argv.includes('--if-missing') && fs.existsSync(path.join(dest, `llam
   console.log(`vendor/llama/llama-${runtime.BUILD} already present`)
   process.exit(0)
 }
+// Fetched beside the current copy and swapped in only once it's complete, so
+// a failed download leaves the runtime that was there.
+const incoming = `${dest}.incoming`
+fs.rmSync(incoming, { recursive: true, force: true })
+await runtime.download((s) => console.log(`  ${s}`), incoming)
 fs.rmSync(dest, { recursive: true, force: true })
-const bin = await runtime.download((s) => console.log(`  ${s}`), dest)
-const dir = path.dirname(bin)
+fs.renameSync(incoming, dest)
+const dir = path.join(dest, `llama-${runtime.BUILD}`)
+const bin = path.join(dir, 'llama-server')
 
 // Keep llama-server, the shared libraries it links, and the licence. The other
 // tools each ship a libllama-<tool>-impl.dylib, which go with them.
@@ -30,8 +36,7 @@ for (const name of fs.readdirSync(dir)) {
 }
 
 // --version prints to stderr.
-const version = execFileSync('/bin/sh', ['-c', `"${bin}" --version 2>&1`], { encoding: 'utf8' })
-  .split('\n')
-  .find((l) => l.startsWith('version'))
+const probe = spawnSync(bin, ['--version'], { encoding: 'utf8', cwd: dir })
+const version = `${probe.stdout ?? ''}${probe.stderr ?? ''}`.split('\n').find((l) => l.startsWith('version'))
 const size = execFileSync('/usr/bin/du', ['-sh', dir], { encoding: 'utf8' }).split('\t')[0]
 console.log(`\nvendor/llama/llama-${runtime.BUILD}  (${size})  ${version ?? ''}`)

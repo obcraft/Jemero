@@ -432,9 +432,12 @@ const RUNTIME_OVERHEAD = 512 * 1024 ** 2
 /** Largest usable context that leaves room for weights, cache and buffers. */
 function pickCtx(entry, bytes, budget) {
   if (entry.unsupportedReason) return null
-  for (let ctx = Math.floor(Math.min(TARGET_CTX, entry.maxCtx) / 256) * 256; ctx >= MIN_CTX; ctx = Math.floor(ctx / 2 / 256) * 256) {
+  for (let ctx = Math.floor(Math.min(TARGET_CTX, entry.maxCtx) / 256) * 256; ctx >= MIN_CTX; ) {
     const kv = kvBytes(entry, ctx)
     if (Number.isFinite(kv) && kv >= 0 && bytes + kv + RUNTIME_OVERHEAD <= budget) return ctx
+    if (ctx === MIN_CTX) break
+    // Halve, but always try MIN_CTX last: 12288 halves to 768 and then 256, skipping it.
+    ctx = Math.max(MIN_CTX, Math.floor(ctx / 2 / 256) * 256)
   }
   return null
 }
@@ -481,6 +484,8 @@ function evaluate(entry, quant, device, target = SPEED_TARGET) {
     unsupportedReason: entry.unsupportedReason ?? null,
     maxCtx: entry.maxCtx,
     needsGB: round(total / GB),
+    /** Coding quality at this quantization, before speed and context weigh in. */
+    quality: Math.round(quality),
     score: ctx === null ? 0 : quality * (0.55 + 0.45 * speedFactor) * (0.7 + 0.3 * Math.min(1, ctx / TARGET_CTX)),
     source: entry.source ?? 'catalog',
     author: entry.repo.split('/')[0],
@@ -515,16 +520,22 @@ function rank(device, priority = 'balanced') {
 /** Human-readable justification, so the pick never looks like magic. */
 function reasons(pick, device, ranked, target) {
   const out = []
+  const ctx = pick.ctx >= 1024 ? `${(pick.ctx / 1024) | 0}k` : String(pick.ctx)
   out.push(
-    `${pick.sizeGB} GB of weights + ${pick.kvGB} GB of KV cache at ${(pick.ctx / 1024) | 0}k context fits inside your ${device.budgetGB} GB model budget (${device.ramGB} GB of unified memory, less what the app and macOS need).`,
+    `${pick.sizeGB} GB of weights + ${pick.kvGB} GB of KV cache at ${ctx} context fits inside your ${device.budgetGB} GB model budget (${device.ramGB} GB of unified memory, less what the app and macOS need).`,
   )
   out.push(
     pick.moe
       ? `Mixture-of-experts: only ~${pick.activeParams}B of ${pick.params}B params are read per token, so on ${device.bandwidthGBs} GB/s it decodes at roughly ${pick.tokensPerSec} tok/s.`
       : `Dense ${pick.params}B at ${pick.quant} reads ${pick.sizeGB} GB per token, which your ${device.bandwidthGBs} GB/s memory turns into roughly ${pick.tokensPerSec} tok/s.`,
   )
-  out.push(`${pick.quant} is the best-quality quantization that still clears ${target} tok/s on this Mac.`)
-  const bigger = ranked.find((r) => !r.fits)
+  out.push(
+    pick.tokensPerSec >= target
+      ? `${pick.quant} is the best-quality quantization that still clears ${target} tok/s on this Mac.`
+      : `Nothing that fits clears ${target} tok/s on this Mac; ${pick.quant} balances quality against the speed there is.`,
+  )
+  // A stronger model that doesn't fit, not merely the first one that doesn't.
+  const bigger = ranked.find((r) => !r.fits && r.quality > pick.quality)
   if (bigger) out.push(`${bigger.label} scores higher but needs about ${bigger.needsGB} GB, so it would swap here.`)
   return out
 }

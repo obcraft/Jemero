@@ -42,7 +42,10 @@ async function readMetadata(url, { signal } = {}) {
 
   let off = 0
   const need = async (n) => {
-    while (off + n > buf.length) await more(Math.max(n, buf.length || FIRST_READ))
+    // Lengths come from the file itself: one that points past the header limit
+    // is refused here, before it becomes a request for gigabytes of weights.
+    if (off + n > MAX_BYTES) throw new Error('GGUF header is larger than expected')
+    while (off + n > buf.length) await more(Math.min(Math.max(n, buf.length || FIRST_READ), MAX_BYTES - buf.length))
   }
   const u32 = async () => (await need(4), (off += 4), buf.readUInt32LE(off - 4))
   const u64 = async () => (await need(8), (off += 8), Number(buf.readBigUInt64LE(off - 8)))

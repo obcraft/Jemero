@@ -145,3 +145,23 @@ test('new Hub downloads distinguish identical filenames in different repositorie
   assert.notEqual(localId(entry, quant), localId({ ...entry, repo: 'org/second' }, quant))
   assert.equal(localId({ ...entry, storageVersion: undefined }, quant), 'org/model-Q4_K_M')
 })
+
+test('the context ladder always tries the minimum before giving up', () => {
+  // 12288 halves to 6144, 3072, 1536, 768 and then 256, below the minimum: 512 must still be tried.
+  const entry = { ...CATALOG.find((e) => e.label === 'Gemma 3 270M'), maxCtx: 12288, kvMetadata: undefined, kvKiBPerToken: 1024 }
+  const quant = entry.quants[0]
+  const budget = quant.bytes + 512 * 1024 ** 2 + MIN_CTX * 1024 * 1024 * 1.05
+  const plan = bestPlan({ ...entry, quants: [quant] }, { budgetBytes: budget, effectiveBandwidthGBs: 75 })
+  assert.equal(plan.fits, true)
+  assert.equal(plan.ctx, MIN_CTX)
+})
+
+test('removing a model only accepts model ids, never a path', async () => {
+  const { remove } = require('../electron/install.cjs')
+  for (const id of ['', '..', '../..', 'org', 'a/b/c', 'org/..']) assert.equal((await remove(id)).ok, false, id)
+})
+
+test('a Hugging Face link into a repository names that repository', () => {
+  assert.equal(repoFromQuery('https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/tree/main'), 'ggml-org/gemma-3-1b-it-GGUF')
+  assert.equal(repoFromQuery('hf.co/ggml-org/gemma-3-1b-it-GGUF/blob/main/gemma-3-1b-it-Q8_0.gguf'), 'ggml-org/gemma-3-1b-it-GGUF')
+})

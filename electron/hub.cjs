@@ -115,7 +115,11 @@ async function describeRepo(name, repo, hit = {}) {
 }
 
 function repoFromQuery(query) {
-  const raw = query.replace(/^https?:\/\/(?:www\.)?(?:huggingface\.co|hf\.co)\//i, '').replace(/\/$/, '')
+  const raw = query
+    .replace(/^(?:https?:\/\/)?(?:www\.)?(?:huggingface\.co|hf\.co)\//i, '')
+    // A link into the repository (a branch, a file) names the repository too.
+    .replace(/\/(?:tree|blob|resolve)\/.*$/, '')
+    .replace(/\/$/, '')
   return REPO_ID.test(raw) ? raw : null
 }
 
@@ -142,7 +146,7 @@ async function searchPage(query, device, priority = 'balanced', page = 0) {
     const term = words.filter((w) => !/^\d/.test(w)).sort((a, b) => b.length - a.length)[0] ?? words[0]
     const params = new URLSearchParams({ search: term, filter: 'gguf', sort: 'downloads', direction: '-1', limit: '100' })
     for (const field of ['gguf', 'downloads', 'gated', 'pipeline_tag', 'cardData', 'siblings']) params.append('expand[]', field)
-    state = { at: Date.now(), repo, words, next: `${HUB}/api/models?${params}`, queue: [], pages: [], seen: new Set(), lock: Promise.resolve() }
+    state = { at: Date.now(), repo, words, next: `${HUB}/api/models?${params}`, queue: [], pages: [], seen: new Set(), failures: new Map(), lock: Promise.resolve() }
     searches.set(key, state)
   }
   // Serialize pagination of the same query; priority changes reuse discovered entries.
@@ -184,9 +188,18 @@ async function searchPage(query, device, priority = 'balanced', page = 0) {
           if (result.entry) entries.push(result.entry)
         }
         if (failed.length) {
-          state.queue.unshift(...failed.map((r) => r.hit))
-          if (!entries.length) throw failed[0].error
-          break
+          // One more try each (a timeout passes); a repository that fails twice
+          // is dropped, or it would come back on every Load more for good.
+          const retry = failed.filter((r) => {
+            const n = (state.failures.get(r.hit.id) ?? 0) + 1
+            state.failures.set(r.hit.id, n)
+            if (n < 2) return true
+            state.seen.add(r.hit.id)
+            return false
+          })
+          state.queue.unshift(...retry.map((r) => r.hit))
+          if (!entries.length && retry.length) throw failed[0].error
+          if (retry.length) break
         }
       }
       state.pages.push({ entries, hasMore: !!(state.queue.length || state.next) })
