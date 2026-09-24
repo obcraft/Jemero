@@ -12,6 +12,7 @@ import {
   type LocalPack,
   type PackList,
   type PackProgress,
+  type PackResult,
 } from '../lib/packs'
 
 const fmt = (bytes: number) =>
@@ -98,9 +99,23 @@ export default function ResourcesPage({
 
   const install = async (id: string) => {
     setErrors(({ [id]: _, ...rest }) => rest)
-    const res = await bridge()?.packs.install(id)
+    // Busy from the click on: the store says nothing until it has the index.
+    setProgress((prev) => ({ ...prev, [id]: prev[id] ?? { id, phase: 'checking', required: 0, free: 0 } }))
+    const res = await bridge()
+      ?.packs.install(id)
+      .catch((err: Error) => ({ ok: false, reason: err.message }) as PackResult)
+    // Already running: that install owns the row's progress and outcome.
+    if (res?.busy) return
     if (res && !res.ok && !res.cancelled && res.reason) setErrors((e) => ({ ...e, [id]: res.reason! }))
     setProgress(({ [id]: _, ...rest }) => rest)
+    void refresh()
+  }
+
+  const rollback = async (id: string) => {
+    const res = await bridge()
+      ?.packs.rollback(id)
+      .catch((err: Error) => ({ ok: false, reason: err.message }))
+    if (res && !res.ok && res.reason) setErrors((e) => ({ ...e, [id]: res.reason! }))
     void refresh()
   }
 
@@ -122,7 +137,9 @@ export default function ResourcesPage({
     const users = usedBy(pack)
     if (users.length && !confirmed) return setConfirm({ pack, usedBy: users })
     setConfirm(null)
-    const res = await bridge()?.packs.remove(pack.id)
+    const res = await bridge()
+      ?.packs.remove(pack.id)
+      .catch((err: Error) => ({ ok: false, reason: err.message }))
     if (res && !res.ok && res.reason) setErrors((e) => ({ ...e, [pack.id]: res.reason! }))
     void refresh()
   }
@@ -207,12 +224,9 @@ export default function ResourcesPage({
                       pack={p}
                       deps={p.dependencies.map((d) => byId.get(d)?.name ?? d)}
                       installed={installed.packs[p.id]?.version ?? null}
+                      stored={list.installed[p.id]?.version ?? null}
                       previous={list.installed[p.id]?.previous ?? null}
-                      onRollback={() =>
-                        void bridge()
-                          ?.packs.rollback(p.id)
-                          .then((r) => (r.ok ? refresh() : r.reason && setErrors((e) => ({ ...e, [p.id]: r.reason! }))))
-                      }
+                      onRollback={() => void rollback(p.id)}
                       progress={progress[p.id]}
                       error={errors[p.id]}
                       onInstall={() => void install(p.id)}
@@ -300,6 +314,7 @@ function PackRow({
   pack,
   deps,
   installed,
+  stored,
   previous,
   progress,
   error,
@@ -310,7 +325,10 @@ function PackRow({
 }: {
   pack: LocalPack
   deps: string[]
+  /** The version the canvas is served: null when not installed, or installed but failing verification. */
   installed: string | null
+  /** The version on disk, whether or not it still verifies. */
+  stored: string | null
   previous: string | null
   onRollback: () => void
   progress?: PackProgress
@@ -335,7 +353,7 @@ function PackRow({
   } else {
     action = (
       <button className="btn" onClick={onInstall} title={`Needs ${fmt(pack.size.installed)} of disk space`}>
-        {error ? 'Retry' : installed ? 'Update' : 'Install'}
+        {error ? 'Retry' : stored === pack.version ? 'Repair' : installed ? 'Update' : 'Install'}
       </button>
     )
   }
@@ -362,7 +380,7 @@ function PackRow({
             Roll back
           </button>
         )}
-        {current && !busy && (
+        {stored && !busy && (
           <button className="icon-btn" onClick={onRemove} title="Remove pack" aria-label={`Remove ${pack.name}`}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />

@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Stage, { type StageEvent } from './Stage'
 import { compile } from '../lib/compile'
 import { bridge } from '../lib/models'
 import type { Item } from '../lib/library'
 import type { Manifest } from '../lib/kits'
-import { importedSpecifiers, isCloudService, packOfSpecifier, type CatalogEntry, type InstalledManifest } from '../lib/packs'
+import { importedSpecifiers, installedKey, isCloudService, packOfSpecifier, type CatalogEntry, type InstalledManifest } from '../lib/packs'
 
 type Row = { key: string; label: string; ok: boolean; detail: string; action?: { label: string; run: () => void } }
 
@@ -33,6 +33,10 @@ export default function OfflineCheck({
   const [canvas, setCanvas] = useState<{ ok: boolean; detail: string } | null>(null)
   const [running, setRunning] = useState(false)
   const [run, setRun] = useState(0)
+  // Callers pass a new function every render; the saved-work scan below
+  // reads it through a ref rather than re-running for it.
+  const onInstallRef = useRef(onInstall)
+  onInstallRef.current = onInstall
 
   const check = useCallback(async () => {
     const api = bridge()
@@ -68,10 +72,6 @@ export default function OfflineCheck({
     return out.ok ? { code: { entry: out.entry, modules: out.modules }, error: null } : { code: null, error: out.error }
   }, [manifest, installed])
 
-  useEffect(() => {
-    if (sample?.error) setCanvas({ ok: false, detail: sample.error })
-  }, [sample])
-
   const onStage = useCallback((e: StageEvent) => {
     if (e.type === 'rendered') setCanvas({ ok: true, detail: `Rendered in ${Math.round(e.ms)} ms` })
     if (e.type === 'error') setCanvas({ ok: false, detail: e.message })
@@ -92,14 +92,15 @@ export default function OfflineCheck({
           label: item.name,
           ok: false,
           detail: `Needs ${inCatalog?.name ?? id} ${version}${installed.packs[id] ? ` (installed: ${installed.packs[id].version})` : ''}`,
-          action: inCatalog ? { label: 'Install', run: () => onInstall(id) } : undefined,
+          // Only the locked version helps: installing any other one changes nothing for this work.
+          action: inCatalog?.version === version ? { label: 'Install', run: () => onInstallRef.current(id) } : undefined,
         })
       }
       for (const spec of importedSpecifiers(v.files)) {
         if (manifest?.imports[spec] || packOfSpecifier(installed, spec)) continue
         const pack = catalog.find((p) => p.kind === 'local' && spec in p.imports)
         if (pack && !rows.some((r) => r.key === `${item.id}:${pack.id}`)) {
-          rows.push({ key: `${item.id}:${pack.id}`, label: item.name, ok: false, detail: `Needs ${pack.name}`, action: { label: 'Install', run: () => onInstall(pack.id) } })
+          rows.push({ key: `${item.id}:${pack.id}`, label: item.name, ok: false, detail: `Needs ${pack.name}`, action: { label: 'Install', run: () => onInstallRef.current(pack.id) } })
         }
       }
       const text = Object.values(v.files).join('\n')
@@ -111,7 +112,7 @@ export default function OfflineCheck({
       }
     }
     return rows
-  }, [items, installed, catalog, manifest, onInstall])
+  }, [items, installed, catalog, manifest])
 
   if (!bridge()) return null
 
@@ -140,15 +141,21 @@ export default function OfflineCheck({
       })
     }
   }
+  // No sample to render is an answer too, and it must not leave the check waiting for one.
+  const canvasResult = !sample
+    ? { ok: false, detail: 'The UI kits are not loaded.' }
+    : sample.error
+      ? { ok: false, detail: sample.error }
+      : canvas
   rows.push({
     key: 'canvas',
     label: 'Canvas',
-    ok: !!canvas?.ok,
-    detail: canvas?.detail ?? 'Rendering a sample…',
+    ok: !!canvasResult?.ok,
+    detail: canvasResult?.detail ?? 'Rendering a sample…',
   })
   rows.push(...projects)
 
-  const done = !!shell && !!canvas
+  const done = !!shell && !!canvasResult
   const problems = rows.filter((r) => !r.ok).length
   const ready = done && problems === 0
 
@@ -181,7 +188,8 @@ export default function OfflineCheck({
             key={run}
             code={sample.code}
             kit="shadcn"
-            packs={{ key: Object.keys(installed.imports).sort().join(','), imports: installed.imports, styles: installed.styles }}
+            // Versions included: an update or a rollback must load the new files, not the old module.
+            packs={{ key: installedKey(installed), imports: installed.imports, styles: installed.styles }}
             layout="center"
             theme="light"
             bg="plain"
