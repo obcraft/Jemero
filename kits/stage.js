@@ -115,14 +115,10 @@ document.addEventListener('click', (e) => {
   console.info(`Link to ${href} (navigation is off on the canvas)`)
 })
 
-// Script can navigate too (location.href = '/signup', location.reload()). Once
-// the canvas has left this page nothing can render in it again, so every
-// navigation away from it is cancelled, whatever started it.
-window.navigation?.addEventListener('navigate', (e) => {
-  if (e.hashChange || !e.cancelable) return
-  e.preventDefault()
-  console.info(`Navigation to ${e.destination.url} (navigation is off on the canvas)`)
-})
+// Navigation from script (location.href = …) can't be cancelled from in here:
+// the canvas has an opaque origin, which gets no navigate events. The host
+// notices the frame loading another page and puts the canvas back
+// (src/components/Stage.tsx).
 
 window.addEventListener('submit', (e) => {
   if (e.defaultPrevented) return
