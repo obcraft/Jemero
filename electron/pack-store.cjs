@@ -19,9 +19,11 @@
 // - Cancelling, a dropped connection or a corrupt file stops before any of
 //   that: the staging folder stays for the next attempt, the active version is
 //   untouched.
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
+const { pipeline } = require('node:stream/promises')
 const { validatePack, validateCatalog, closure, verifyPackDir, sha256, FORMAT_VERSION } = require('./pack-format.cjs')
 const signing = require('./pack-sign.cjs')
 
@@ -42,9 +44,39 @@ class PackError extends Error {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const exists = (p) => fsp.stat(p).then(() => true, () => false)
 
+/** Pack ids as the format allows them: never a path. */
+const PACK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
+
+/** Runs tasks one at a time, in call order; a failed task doesn't stop the next. */
+function queue() {
+  let tail = Promise.resolve()
+  return (task) => {
+    const run = tail.then(task)
+    tail = run.catch(() => {})
+    return run
+  }
+}
+
+/**
+ * An abort signal for a stalled transfer: it fires once `touch()` hasn't been
+ * called for `ms`. A deadline on the whole request would also fail a slow but
+ * steady download.
+ */
+function stallTimer(ms) {
+  const controller = new AbortController()
+  let timer
+  const touch = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => controller.abort(new DOMException('The pack server stopped sending data.', 'TimeoutError')), ms)
+  }
+  touch()
+  return { signal: controller.signal, touch, stop: () => clearTimeout(timer) }
+}
+
 async function writeJsonAtomic(file, value) {
   await fsp.mkdir(path.dirname(file), { recursive: true })
-  const tmp = `${file}.${process.pid}.tmp`
+  // Unique per write: two writes of one file must not share (and steal) a temp file.
+  const tmp = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`
   await fsp.writeFile(tmp, JSON.stringify(value, null, 2) + '\n')
   await fsp.rename(tmp, file)
 }
@@ -83,6 +115,11 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
   const stagingDir = (p) => path.join(root, '.staging', `${p.id}@${p.version}`)
   const packDir = (id, version) => path.join(root, id, version)
   const inFlight = new Map() // id -> AbortController
+  // Downloads run one at a time: two packs can share a dependency, and with
+  // it a staging folder. installed.json changes (activate, remove, rollback)
+  // are read-modify-write, so they take turns as well.
+  const downloads = queue()
+  const stateChange = queue()
 
   const free =
     freeBytes ??
@@ -92,18 +129,29 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
       return bavail * bsize
     })
 
+  /** A response, and the stall timer its body is read under: touch() per chunk, stop() when done. */
   async function get(url, signal, headers = {}) {
-    const timeout = AbortSignal.timeout(TIMEOUT_MS)
-    const res = await fetchImpl(url, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout, headers })
-    if (res.status === 404) throw new PackError(`The pack server has no ${url.slice(base.length + 1)}.`)
-    if (res.status >= 500) throw new PackError(`The pack server failed (${res.status}). Try again.`, { retryable: true })
-    return res
+    const stall = stallTimer(TIMEOUT_MS)
+    try {
+      const res = await fetchImpl(url, { signal: signal ? AbortSignal.any([signal, stall.signal]) : stall.signal, headers })
+      if (res.status === 404) throw new PackError(`The pack server has no ${url.slice(base.length + 1)}.`)
+      if (res.status >= 500) throw new PackError(`The pack server failed (${res.status}). Try again.`, { retryable: true })
+      stall.touch()
+      return { res, stall }
+    } catch (err) {
+      stall.stop()
+      throw err
+    }
   }
 
   async function getJson(url, signal) {
-    const res = await get(url, signal)
-    if (!res.ok) throw new PackError(`The pack server answered ${res.status} for ${url.slice(base.length + 1)}.`)
-    return res.json()
+    const { res, stall } = await get(url, signal)
+    try {
+      if (!res.ok) throw new PackError(`The pack server answered ${res.status} for ${url.slice(base.length + 1)}.`)
+      return await res.json()
+    } finally {
+      stall.stop()
+    }
   }
 
   function checkCatalog(envelope) {
@@ -123,7 +171,9 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
       try {
         const envelope = await getJson(`${base}/index.signed.json`)
         const catalog = checkCatalog(envelope)
-        await writeJsonAtomic(catalogFile, envelope)
+        // The copy for offline listing is a convenience: failing to write it
+        // mustn't turn a fresh, verified index into "offline".
+        await writeJsonAtomic(catalogFile, envelope).catch(() => {})
         return { catalog, fromCache: false }
       } catch (err) {
         if (!(await exists(catalogFile))) throw new PackError(explain(err, 'the pack index'))
@@ -156,27 +206,38 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
   async function downloadFile(url, dest, expected, signal, onBytes) {
     const part = `${dest}.part`
     await fsp.mkdir(path.dirname(dest), { recursive: true })
+    // What an earlier attempt left is progress already made.
+    const kept = (await fsp.stat(part).catch(() => null))?.size ?? 0
+    if (kept) onBytes(kept)
     let freshAfterMismatch = false
     for (let attempt = 0; ; attempt++) {
       try {
         const from = (await fsp.stat(part).catch(() => null))?.size ?? 0
-        const res = await get(url, signal, from ? { Range: `bytes=${from}-` } : {})
-        if (res.status === 416) {
-          // Nothing left to send: the .part is already whole (or wrong); the hash decides.
-        } else if (!res.ok) {
-          throw new PackError(`The pack server answered ${res.status} for ${path.basename(dest)}.`)
-        } else {
-          const append = from > 0 && res.status === 206
-          if (from > 0 && !append) onBytes(-from) // the server ignored Range: start over
-          const out = fs.createWriteStream(part, { flags: append ? 'a' : 'w' })
-          try {
-            for await (const chunk of res.body) {
-              if (!out.write(chunk)) await new Promise((r) => out.once('drain', r))
-              onBytes(chunk.length)
-            }
-          } finally {
-            await new Promise((resolve, reject) => out.end((e) => (e ? reject(e) : resolve())))
+        const { res, stall } = await get(url, signal, from ? { Range: `bytes=${from}-` } : {})
+        try {
+          if (res.status === 416) {
+            // Nothing left to send: the .part is already whole (or wrong); the hash decides.
+          } else if (!res.ok) {
+            throw new PackError(`The pack server answered ${res.status} for ${path.basename(dest)}.`)
+          } else {
+            const append = from > 0 && res.status === 206
+            if (from > 0 && !append) onBytes(-from) // the server ignored Range: start over
+            // pipeline() settles on a write error (a full disk) as well as on a
+            // read error, and closes both ends either way.
+            await pipeline(
+              res.body,
+              async function* (chunks) {
+                for await (const chunk of chunks) {
+                  stall.touch()
+                  onBytes(chunk.length)
+                  yield chunk
+                }
+              },
+              fs.createWriteStream(part, { flags: append ? 'a' : 'w' }),
+            )
           }
+        } finally {
+          stall.stop()
         }
         const got = await hashFile(part)
         if (got === expected) {
@@ -242,7 +303,9 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
     await activate(manifest, staging)
   }
 
-  async function activate(manifest, staging) {
+  const activate = (manifest, staging) => stateChange(() => activateNow(manifest, staging))
+
+  async function activateNow(manifest, staging) {
     const final = packDir(manifest.id, manifest.version)
     const trash = path.join(root, '.trash')
     await fsp.mkdir(path.dirname(final), { recursive: true })
@@ -279,17 +342,31 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
    */
   async function install(id, onProgress = () => {}) {
     if (!base) return fail(id, onProgress, 'No pack server is configured.')
-    if (inFlight.has(id)) return { ok: false, reason: 'Already installing.' }
+    if (inFlight.has(id)) return { ok: false, busy: true, reason: 'Already installing.' }
     const controller = new AbortController()
     inFlight.set(id, controller)
     try {
+      return await downloads(() => installNow(id, controller, onProgress))
+    } finally {
+      inFlight.delete(id)
+    }
+  }
+
+  async function installNow(id, controller, onProgress) {
+    try {
+      controller.signal.throwIfAborted()
       const { catalog: cat } = await catalog()
       const target = cat.packs.find((p) => p.id === id)
       if (!target) throw new PackError(`There is no pack called ${id}.`)
       if (target.kind !== 'local') throw new PackError(`${target.name} is an online service; there is nothing to install.`)
       const order = closure(cat, [id])
       const active = await installed()
-      const todo = order.filter((p) => active[p.id]?.version !== p.version)
+      // A version that is active but no longer verifies is installed again:
+      // that's how a damaged pack gets repaired.
+      const todo = []
+      for (const p of order) {
+        if (active[p.id]?.version !== p.version || (await verifyInstalled(p.id)).length) todo.push(p)
+      }
 
       const total = todo.reduce((n, p) => n + p.size.download, 0)
       const required = Math.ceil(todo.reduce((n, p) => n + p.size.installed, 0) * DISK_MARGIN)
@@ -314,8 +391,6 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
         return { ok: false, cancelled: true, reason: 'Cancelled. The download resumes where it stopped.' }
       }
       return fail(id, onProgress, explain(err, id))
-    } finally {
-      inFlight.delete(id)
     }
   }
 
@@ -334,7 +409,12 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
 
   /** Deactivate and delete a pack, all its versions and any half download. */
   async function remove(id) {
+    if (typeof id !== 'string' || !PACK_ID.test(id)) return { ok: false, reason: 'That is not a pack id.' }
     if (inFlight.has(id)) return { ok: false, reason: 'It is downloading. Cancel first.' }
+    return stateChange(() => removeNow(id))
+  }
+
+  async function removeNow(id) {
     const all = await installed()
     delete all[id]
     await writeJsonAtomic(installedFile, { formatVersion: FORMAT_VERSION, packs: all })
@@ -350,7 +430,9 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
    * still be on disk and verify; installed.json is replaced by rename, so the
    * switch is atomic like an activation.
    */
-  async function rollback(id) {
+  const rollback = (id) => stateChange(() => rollbackNow(id))
+
+  async function rollbackNow(id) {
     const all = await installed()
     const active = all[id]
     if (!active?.previous) return { ok: false, reason: 'There is no earlier version to go back to.' }

@@ -100,7 +100,8 @@ export type PackProgress =
   | { id: string; phase: 'done' | 'cancelled' }
   | { id: string; phase: 'error'; message: string }
 
-export type PackResult = { ok: boolean; reason?: string; cancelled?: boolean }
+/** `busy`: that pack is already being installed; the running install reports its own outcome. */
+export type PackResult = { ok: boolean; reason?: string; cancelled?: boolean; busy?: boolean }
 
 export type PackBridge = {
   list(): Promise<PackList>

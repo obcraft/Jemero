@@ -308,3 +308,44 @@ test('losing the connection for good mid-download fails clearly and keeps the pr
     await t.done()
   }
 })
+
+test('installing the active version again repairs a damaged pack', async () => {
+  const t = await setup()
+  try {
+    publish(t.dist, [v1])
+    const store = t.store()
+    assert.deepEqual(await store.install('demo'), { ok: true })
+    fs.writeFileSync(path.join(t.root, 'demo', '1.0.0', 'files', 'demo.js'), 'tampered')
+    assert.notDeepEqual(await store.verifyInstalled('demo'), [])
+    assert.deepEqual(await store.install('demo'), { ok: true })
+    assert.deepEqual(await store.verifyInstalled('demo'), [])
+  } finally {
+    await t.done()
+  }
+})
+
+test('concurrent installs sharing a dependency both land in installed.json', async () => {
+  const t = await setup()
+  try {
+    publish(t.dist, [
+      { id: 'base', version: '1.0.0', files: { 'base.js': 'export default 0' } },
+      { id: 'a', version: '1.0.0', files: { 'a.js': 'export default 1' }, dependencies: ['base'] },
+      { id: 'b', version: '1.0.0', files: { 'b.js': 'export default 2' }, dependencies: ['base'] },
+    ])
+    const store = t.store()
+    assert.deepEqual(await Promise.all([store.install('a'), store.install('b')]), [{ ok: true }, { ok: true }])
+    assert.deepEqual(Object.keys(await store.installed()).sort(), ['a', 'b', 'base'])
+    for (const id of ['a', 'b', 'base']) assert.deepEqual(await store.verifyInstalled(id), [])
+  } finally {
+    await t.done()
+  }
+})
+
+test('remove refuses anything that is not a pack id', async () => {
+  const t = await setup()
+  try {
+    for (const id of ['..', '', 'a/b', '.staging']) assert.equal((await t.store().remove(id)).ok, false)
+  } finally {
+    await t.done()
+  }
+})
