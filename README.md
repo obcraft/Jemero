@@ -225,7 +225,7 @@ prompt ──► llama-server (built in, Metal) ──► <plan> + <file> ──
 | `src/lib/packSelect.ts` | Pass one of a generation: which packs the request needs, from the catalog when the pack server answers, from what's installed otherwise. |
 | `src/lib/llm.ts` · `parser.ts` | Streaming client; pulls `<plan>`, `<file>` and `<review>` out of the stream as it arrives. |
 
-Two details that matter:
+Three details that matter:
 
 1. **The canvas is sandboxed.** Generated code runs in an iframe with only `allow-scripts
    allow-forms`, so it has an opaque origin: it can't reach the app, its storage or the
@@ -294,6 +294,8 @@ canvas imports it in tens, because every kit is already bundled and loaded.
 | `JEMERO_OPEN` | none | `models` or `settings`: open straight onto that panel |
 | `JEMERO_THEME` | The OS | `light` or `dark` for this run |
 | `JEMERO_CAPTURE` | none | Write a PNG of the window once loaded |
+| `JEMERO_PACKS_URL` | `packs-dist/` in development | Where packs are published (the signed `index.signed.json`) |
+| `JEMERO_OFFLINE` | none | `1` refuses every external request, as with the network unplugged |
 
 Server log: `~/Library/Application Support/Jemero/logs/llama-server.log`
 
@@ -317,7 +319,7 @@ To release: bump `version` in `package.json`, then
 
 ```bash
 npm run dist
-gh release create v0.4.0 release/Jemero-arm64.dmg --title "Jemero 0.4.0"
+gh release create v1.0.0 release/Jemero-arm64.dmg --title "Jemero 1.0.0"
 ```
 
 The DMG name has no version in it, so the download link
