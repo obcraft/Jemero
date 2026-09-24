@@ -31,6 +31,8 @@ export default function ModelMenu({
 }) {
   const [snap, setSnap] = useState<CatalogSnapshot | null>(cachedSnapshot)
   const [status, setStatus] = useState<{ id: string; text: string } | null>(null)
+  /** Why the last switch failed, shown on its row until the next click. */
+  const [failure, setFailure] = useState<{ id: string; text: string } | null>(null)
   const menu = useRef<HTMLDivElement>(null)
   const sync = useCallback(() => setSnap(cachedSnapshot()), [])
   // Fresh closures from the parent every render, read through refs so the
@@ -50,7 +52,10 @@ export default function ModelMenu({
         onActiveRef.current(p.id)
         onCloseRef.current()
       }
-      if (p.phase === 'error') setStatus(null)
+      if (p.phase === 'error') {
+        setStatus(null)
+        if (p.message) setFailure({ id: p.id, text: p.message })
+      }
     })
     return () => {
       stopWatch()
@@ -83,9 +88,17 @@ export default function ModelMenu({
 
   const activate = async (id: string) => {
     if (id === snap?.active) return onClose()
+    setFailure(null)
     setStatus({ id, text: 'Stopping the current model…' })
-    const res = await bridge()?.activate(id)
-    if (res && !res.ok) setStatus(null)
+    try {
+      const res = await bridge()?.activate(id)
+      if (res && !res.ok) setFailure({ id, text: res.reason ?? 'The model did not start.' })
+    } catch (err) {
+      setFailure({ id, text: (err as Error).message })
+    } finally {
+      // 'active' closes the menu; anything else leaves it usable.
+      setStatus(null)
+    }
   }
 
   return (
@@ -95,6 +108,7 @@ export default function ModelMenu({
         const plan = plans.get(m.id)
         const active = snap?.active === m.id
         const busy = status?.id === m.id
+        const failed = !busy && failure?.id === m.id
         return (
           <button
             key={m.id}
@@ -106,10 +120,12 @@ export default function ModelMenu({
             <span className="menu-check">{active ? '●' : ''}</span>
             <span className="menu-text">
               <span className="menu-title">{plan?.label ?? modelLabel(m.id)}</span>
-              <span className="menu-sub">
+              <span className={`menu-sub${failed ? ' failed' : ''}`} title={failed ? failure.text : undefined}>
                 {busy
                   ? status.text
-                  : plan
+                  : failed
+                    ? `Didn’t start: ${failure.text.split('\n')[0]}`
+                    : plan
                     ? `${plan.quant} · ${formatGB(plan.sizeGB)} · ≈${plan.tokensPerSec} tok/s`
                     : formatGB(m.bytes / 1024 ** 3)}
               </span>

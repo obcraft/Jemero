@@ -451,7 +451,13 @@ function registerModelIpc() {
   ipcMain.handle('models:activate', async (_e, modelId) => {
     console.log(`[models] switching to ${modelId}`)
     emit({ id: modelId, phase: 'activating' })
-    const res = await switchModel(modelId, (status) => emit({ id: modelId, phase: 'activating', message: status }))
+    let res
+    try {
+      res = await switchModel(modelId, (status) => emit({ id: modelId, phase: 'activating', message: status }))
+    } catch (err) {
+      // No runtime to start it with: a failed switch like any other, not a stuck one.
+      res = { ok: false, reason: err.message }
+    }
     emit({ id: modelId, phase: res.ok ? 'active' : 'error', message: res.ok ? undefined : res.reason })
     return res
   })

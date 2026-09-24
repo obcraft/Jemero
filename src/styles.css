@@ -212,6 +212,7 @@ textarea:focus-visible,
 .menu-title { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-sub { font-size: 10.5px; color: var(--muted); font-family: ui-monospace, Menlo, monospace; }
 .menu-sub.plain { font-family: inherit; font-size: 11px; }
+.menu-sub.failed { color: var(--warn); font-family: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .menu-note { padding: 6px 9px 7px; font-size: 10.5px; color: var(--faint); }
 .model-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .menu-sep { height: 1px; background: var(--line); margin: 6px 4px; }

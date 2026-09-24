@@ -870,10 +870,11 @@ export default function App() {
 
   const submit = useCallback(() => {
     const text = prompt.trim()
-    if (!text || busy) return
+    // ⌘↵ works while the button is disabled: don't swallow a prompt nothing can answer.
+    if (!text || busy || !serverOk || !manifest) return
     setPrompt('')
     void generate(item ? 'refine' : 'build', text)
-  }, [prompt, busy, item, generate])
+  }, [prompt, busy, serverOk, manifest, item, generate])
 
   const onEdit = useCallback(
     (path: string, content: string) => {
@@ -1149,7 +1150,8 @@ export default function App() {
           <ModelBrowser
             open
             onClose={() => {
-              setPage(null)
+              // Opened from first-run setup ("More models"): go back and finish it.
+              setPage(settings.setupDone ? null : 'setup')
               if (window.location.hash === '#models') window.location.hash = ''
             }}
             onActive={(id) => setModel(id)}
