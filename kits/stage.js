@@ -47,6 +47,9 @@ function show(value) {
     const text = JSON.stringify(value, (_key, v) => {
       if (typeof v === 'function') return `ƒ ${v.name || 'anonymous'}()`
       if (typeof v === 'bigint') return `${v}n`
+      // Selection state is often a Set or a Map, which JSON prints as {}.
+      if (v instanceof Set) return [...v]
+      if (v instanceof Map) return Object.fromEntries(v)
       if (typeof v === 'object' && v !== null) {
         if (seen.has(v)) return '[Circular]'
         seen.add(v)
@@ -110,6 +113,15 @@ document.addEventListener('click', (e) => {
   if (!href || href.startsWith('#')) return
   e.preventDefault()
   console.info(`Link to ${href} (navigation is off on the canvas)`)
+})
+
+// Script can navigate too (location.href = '/signup', location.reload()). Once
+// the canvas has left this page nothing can render in it again, so every
+// navigation away from it is cancelled, whatever started it.
+window.navigation?.addEventListener('navigate', (e) => {
+  if (e.hashChange || !e.cancelable) return
+  e.preventDefault()
+  console.info(`Navigation to ${e.destination.url} (navigation is off on the canvas)`)
 })
 
 window.addEventListener('submit', (e) => {
@@ -352,6 +364,13 @@ window.addEventListener('message', (e) => {
   } else if (msg.type === 'reset') {
     nonce++
     paint()
+  } else if (msg.type === 'clear') {
+    // Nothing to show: the last component stops too, timers and logs included.
+    seq = msg.seq
+    current = null
+    root?.unmount()
+    root = null
+    mount.replaceChildren()
   }
 })
 

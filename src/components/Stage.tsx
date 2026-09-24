@@ -43,7 +43,12 @@ const GUTTER = 28
 function Stage({ code, kit, packs, layout, theme, bg, width, variant, resetKey, onEvent, children }: Props) {
   const frame = useRef<HTMLIFrameElement>(null)
   const pane = useRef<HTMLDivElement>(null)
-  const [ready, setReady] = useState(false)
+  /**
+   * How many times the current iframe has announced a fresh page (0: not yet).
+   * A count, not a flag: a page that was reloaded under us announces itself
+   * again and has to be sent the component again.
+   */
+  const [ready, setReady] = useState(0)
   const [box, setBox] = useState({ w: 0, h: 0 })
   const seq = useRef(0)
   const onEventRef = useRef(onEvent)
@@ -52,14 +57,14 @@ function Stage({ code, kit, packs, layout, theme, bg, width, variant, resetKey, 
   const post = (msg: object) => frame.current?.contentWindow?.postMessage({ __jemero: 'host', ...msg }, '*')
 
   // A new kit or pack set is a new iframe, which has to announce itself again.
-  useLayoutEffect(() => setReady(false), [kit, packs.key])
+  useLayoutEffect(() => setReady(0), [kit, packs.key])
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (!frame.current || e.source !== frame.current.contentWindow) return
       const d = e.data as ({ __jemero?: string; type?: string; seq?: number } & Record<string, unknown>) | null
       if (!d || d.__jemero !== 'stage') return
-      if (d.type === 'ready') return setReady(true)
+      if (d.type === 'ready') return setReady((n) => n + 1)
       // Replies to a render that has since been replaced are noise.
       if ((d.type === 'rendered' || d.type === 'error') && typeof d.seq === 'number' && d.seq !== seq.current) return
       onEventRef.current(d as unknown as StageEvent)
@@ -79,8 +84,10 @@ function Stage({ code, kit, packs, layout, theme, bg, width, variant, resetKey, 
   const options = { theme, layout, bg, variant }
 
   useEffect(() => {
-    if (!ready || !code) return
+    if (!ready) return
     seq.current += 1
+    // No code: stop what's there, or its timers and logs run on under the overlay.
+    if (!code) return post({ type: 'clear', seq: seq.current })
     post({ type: 'render', seq: seq.current, kit, entry: code.entry, modules: code.modules, options })
     // Options travel with the code here and on their own below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
