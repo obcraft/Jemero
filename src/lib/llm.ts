@@ -15,22 +15,26 @@ export async function listModels(): Promise<string[]> {
   return (json.data ?? []).map((m: { id: string }) => m.id)
 }
 
-export type ServerState = { ok: boolean; loading: boolean; detail: string }
+/** Whether the server can answer now, and with which model ('' when it can't). */
+export type ServerState = { ok: boolean; loading: boolean; model: string; detail: string }
 
 /**
  * llama-server answers 503 while it's loading weights. That's the normal state
  * for a few seconds after every launch and every switch, not a failure, so it
- * gets its own flag instead of reading as "no model".
+ * gets its own flag instead of reading as "no model". It lists the model on
+ * /models during the load as well, so only /health tells loading from ready.
  */
 export async function ping(): Promise<ServerState> {
   try {
+    const health = await fetch(`${BASE}/health`)
+    if (health.status === 503) return { ok: false, loading: true, model: '', detail: 'loading the model' }
     const models = await listModels()
     return models.length
-      ? { ok: true, loading: false, detail: `${models.length} model(s) loaded` }
-      : { ok: false, loading: false, detail: 'no model is loaded' }
+      ? { ok: true, loading: false, model: models[0], detail: `${models.length} model(s) loaded` }
+      : { ok: false, loading: false, model: '', detail: 'no model is loaded' }
   } catch (e) {
     const detail = (e as Error).message
-    return { ok: false, loading: /\b503\b/.test(detail), detail }
+    return { ok: false, loading: /\b503\b/.test(detail), model: '', detail }
   }
 }
 

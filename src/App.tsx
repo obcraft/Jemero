@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { listModels, ping, streamChat, type ChatMessage } from './lib/llm'
+import { ping, streamChat, type ChatMessage } from './lib/llm'
 import { parseArtifacts, type ParsedFile } from './lib/parser'
 import { compile, isScript, pickEntry, type Compiled } from './lib/compile'
 import { kitById, withPacks, loadManifest, type KitId, type Manifest } from './lib/kits'
@@ -375,13 +375,9 @@ export default function App() {
       setServerOk(result.ok)
       setServerStatus(result.detail)
       setServerLoading(result.loading)
-      if (result.ok) {
-        const ids = await listModels().catch(() => [])
-        if (cancelled) return
-        // The server holds exactly one model at a time, so it, not a stale
-        // selection, is the truth about what a prompt will be answered by.
-        setModel(ids[0] ?? '')
-      }
+      // The server holds exactly one model at a time, so it, not a stale
+      // selection, is the truth about what a prompt will be answered by.
+      if (result.ok) setModel(result.model)
     }
     void check()
     // No point probing a local server while nobody is looking at the window.

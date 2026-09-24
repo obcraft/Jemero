@@ -39,15 +39,40 @@ function writeState(patch) {
   fs.writeFileSync(statePath(), JSON.stringify({ ...readState(), ...patch }, null, 2) + '\n')
 }
 
-/** The model id the server answers to, or null if nothing is serving. */
+/**
+ * The model id the server answers to, or null if nothing is ready to answer.
+ * llama-server binds its port before it loads the weights and lists the model
+ * on /v1/models the whole time, so only /health (503 until loaded) says ready.
+ */
 async function probe() {
   try {
+    const health = await fetch(`${URL_BASE}/health`, { signal: AbortSignal.timeout(2000) })
+    if (!health.ok) return null
     const res = await fetch(`${URL_BASE}/v1/models`, { signal: AbortSignal.timeout(2000) })
     if (!res.ok) return null
     const json = await res.json()
     return Array.isArray(json.data) && json.data.length ? json.data[0].id : null
   } catch {
     return null
+  }
+}
+
+/** Is anything still bound to our port? A server that is loading answers /health with 503. */
+async function listening() {
+  try {
+    await fetch(`${URL_BASE}/health`, { signal: AbortSignal.timeout(2000) })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** The process name of a pid, or '' if it no longer exists. */
+function commandOf(pid) {
+  try {
+    return execFileSync('/bin/ps', ['-o', 'comm=', '-p', String(pid)], { encoding: 'utf8' }).trim()
+  } catch {
+    return ''
   }
 }
 
@@ -106,7 +131,11 @@ async function choose() {
   return { id, ctx: plan?.ctx ?? Number(process.env.JEMERO_CTX ?? TARGET_CTX), recommended, installed: local, plan }
 }
 
-/** Stop the server we started. Falls back to whatever llama-server holds our port. */
+/**
+ * Stop the server we started. Falls back to whatever llama-server holds our port.
+ * A pid is only signalled while it still belongs to llama-server: the one in
+ * server.json may be long gone and reused by an unrelated process.
+ */
 function stopServing() {
   const pids = new Set()
   const { pid } = readState()
@@ -115,13 +144,11 @@ function stopServing() {
     execFileSync('/usr/sbin/lsof', ['-nP', '-ti', `tcp:${PORT}`, '-sTCP:LISTEN'], { encoding: 'utf8' })
       .split('\n')
       .filter(Boolean)
-      .forEach((p) => {
-        const cmd = execFileSync('/bin/ps', ['-o', 'comm=', '-p', p], { encoding: 'utf8' })
-        if (/llama-server/.test(cmd)) pids.add(Number(p))
-      })
+      .forEach((p) => pids.add(Number(p)))
   } catch {
     /* nothing listening */
   }
+  for (const p of pids) if (!/llama-server/.test(commandOf(p))) pids.delete(p)
   let stopped = 0
   for (const p of pids) {
     try {
@@ -139,8 +166,28 @@ function stopServing() {
 async function waitForExit(ms = 8000) {
   const until = Date.now() + ms
   while (Date.now() < until) {
-    if (!(await probe())) return
+    if (!(await listening())) return
     await sleep(250)
+  }
+}
+
+/** The server log keeps the last few launches, not every launch ever. */
+const LOG_LIMIT = 8 * 1024 * 1024
+
+/** The last `n` lines of the server log, read from its end rather than whole. */
+function logTail(n) {
+  let fd
+  try {
+    fd = fs.openSync(logPath(), 'r')
+    const size = fs.fstatSync(fd).size
+    const length = Math.min(size, 16 * 1024)
+    const buf = Buffer.alloc(length)
+    fs.readSync(fd, buf, 0, length, size - length)
+    return buf.toString('utf8').split('\n').slice(-n).join('\n')
+  } catch {
+    return ''
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd)
   }
 }
 
@@ -148,19 +195,33 @@ async function waitForExit(ms = 8000) {
 async function serveModel(id, ctx, onStatus = () => {}) {
   const bin = await ensureRuntime(onStatus)
   fs.mkdirSync(path.dirname(logPath()), { recursive: true })
-  const log = fs.openSync(logPath(), 'a')
+  let size = 0
+  try {
+    size = fs.statSync(logPath()).size
+  } catch {
+    /* no log yet */
+  }
+  const log = fs.openSync(logPath(), size > LOG_LIMIT ? 'w' : 'a')
 
   onStatus(`Loading ${id.split('/').pop()}…`)
-  const child = spawn(bin, serverArgs(id, ctx), {
-    detached: true,
-    stdio: ['ignore', log, log],
-    cwd: path.dirname(bin),
-  })
+  let child
+  try {
+    child = spawn(bin, serverArgs(id, ctx), {
+      detached: true,
+      stdio: ['ignore', log, log],
+      cwd: path.dirname(bin),
+    })
+  } finally {
+    // The child has its own copy of the descriptor.
+    fs.closeSync(log)
+  }
   child.unref()
   writeState({ pid: child.pid, serving: id, port: PORT, ctx })
 
   let exited = null
-  child.once('exit', (code) => (exited = code ?? -1))
+  // A binary that can't be executed fails here, not with an exit code.
+  child.once('error', (err) => (exited = err.code ?? err.message))
+  child.once('exit', (code) => (exited ??= code ?? -1))
 
   // Big models on a cold disk cache take a while; 3 minutes covers a 60 GB load.
   for (let i = 0; i < 360; i++) {
@@ -170,7 +231,7 @@ async function serveModel(id, ctx, onStatus = () => {}) {
       return { ok: true, model: serving }
     }
     if (exited !== null) {
-      const tail = fs.readFileSync(logPath(), 'utf8').split('\n').slice(-12).join('\n')
+      const tail = logTail(12)
       writeState({ pid: null, serving: null })
       return { ok: false, reason: `The model server exited while loading (code ${exited}).\n\n${tail}` }
     }
