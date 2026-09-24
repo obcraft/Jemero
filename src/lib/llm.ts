@@ -101,6 +101,16 @@ export type StreamOpts = {
   onThought?: (text: string) => void
 }
 
+/** The message of an error event's JSON payload, or the payload itself. */
+function streamError(payload: string): string {
+  try {
+    const json = JSON.parse(payload)
+    return String(json.error?.message ?? json.message ?? payload).slice(0, 300)
+  } catch {
+    return payload.trim().slice(0, 300)
+  }
+}
+
 export async function streamChat(opts: StreamOpts): Promise<string> {
   let maxTokens = opts.maxTokens ?? 4096
   const api = bridge()
@@ -153,19 +163,23 @@ export async function streamChat(opts: StreamOpts): Promise<string> {
 
     for (const line of lines) {
       const trimmed = line.trim()
+      // The server reports a failure mid-answer as an `error:` event; ignoring
+      // it would pass a cut-off answer off as a finished one.
+      if (trimmed.startsWith('error:')) throw new Error(`Model server: ${streamError(trimmed.slice(6))}`)
       if (!trimmed.startsWith('data:')) continue
       const payload = trimmed.slice(5).trim()
       if (payload === '[DONE]') continue
-      let delta = ''
+      let json: { error?: unknown; choices?: { delta?: { content?: string; reasoning_content?: string } }[] }
       try {
-        const json = JSON.parse(payload)
-        delta = json.choices?.[0]?.delta?.content ?? ''
-        // Some builds surface reasoning on a separate field.
-        const reasoning = json.choices?.[0]?.delta?.reasoning_content
-        if (reasoning) opts.onThought?.(reasoning)
+        json = JSON.parse(payload)
       } catch {
         continue
       }
+      if (json.error) throw new Error(`Model server: ${streamError(payload)}`)
+      const delta = json.choices?.[0]?.delta?.content ?? ''
+      // Some builds surface reasoning on a separate field.
+      const reasoning = json.choices?.[0]?.delta?.reasoning_content
+      if (reasoning) opts.onThought?.(reasoning)
       if (!delta) continue
       const visible = filter.push(delta)
       if (visible) {
