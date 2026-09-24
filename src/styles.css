@@ -318,19 +318,11 @@ textarea:focus-visible,
 .thought summary { cursor: pointer; }
 .thought pre { white-space: pre-wrap; max-height: 160px; overflow: auto; opacity: 0.7; }
 
-.hint h2 { margin: 0 0 6px; font-size: 18px; }
-.hint p { color: var(--muted); font-size: 13px; margin: 0 0 14px; line-height: 1.55; }
 .kind-switch { margin-bottom: 12px; }
-.hint .loading-note { display: flex; align-items: center; gap: 10px; color: var(--muted); }
-.hint .loading-note .spinner-dot { width: 7px; height: 7px; }
-.hint .warn { color: var(--warn); border-left: 2px solid var(--warn); padding-left: 10px; line-height: 1.6; }
-.examples { display: flex; flex-direction: column; gap: 8px; }
-.examples button {
-  text-align: left; background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
-  border-radius: 8px; padding: 10px; font-size: 12px; cursor: pointer;
-  transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
-}
-.examples button:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
+/* The model server's state, under the conversation. */
+.turns > .loading-note { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12.5px; margin: 0; }
+.turns > .loading-note .spinner-dot { width: 7px; height: 7px; }
+.turns > .warn { color: var(--warn); border-left: 2px solid var(--warn); padding-left: 10px; line-height: 1.6; font-size: 12.5px; margin: 0; }
 
 button.link {
   background: none; border: 0; padding: 0; font: inherit;

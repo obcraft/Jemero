@@ -3,6 +3,9 @@ import { memo, useEffect, useRef } from 'react'
 export type ConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug' | 'system'
 export type ConsoleEntry = { id: number; level: ConsoleLevel; text: string; at: number }
 
+/** One formatter for every line: toLocaleTimeString builds a new one per call. */
+const TIME = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
 /**
  * What the component logs on the canvas (console.*, alerts, form submissions,
  * React's warnings), plus what the compiler repaired. It's the test bench:
@@ -45,7 +48,7 @@ function ConsoleView({ entries, onClear }: { entries: ConsoleEntry[]; onClear: (
         {entries.map((e) => (
           <div key={e.id} className={`console-line ${e.level}`}>
             <span className="console-time">
-              {new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {TIME.format(e.at)}
             </span>
             <pre>{e.text}</pre>
           </div>

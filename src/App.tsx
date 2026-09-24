@@ -124,27 +124,6 @@ export function repeatingBlock(text: string): boolean {
 
 const TABS: Tab[] = ['canvas', 'code', 'console']
 
-const EXAMPLES: Record<Kind, string[]> = {
-  component: [
-    'Searchable select: each option shows an icon, a name and a chevron; a search field on top filters the list live',
-    'Date range picker with presets like “Last 7 days” and a two-month calendar',
-    'OTP input with 6 boxes, paste support, auto-advance and an error state',
-    'Tag input: type and press Enter to add chips, Backspace removes the last one',
-  ],
-  block: [
-    'Sign-in card with email, password with show/hide, remember me and social buttons',
-    'Notification settings panel with grouped switches and a sticky save bar',
-    'Pricing card with a monthly/yearly toggle and a feature checklist',
-    'Data table with search, sortable columns, row selection and pagination',
-  ],
-  section: [
-    'SaaS hero: headline, subtext, email capture and a product screenshot placeholder',
-    'Three-tier pricing section with the middle plan highlighted',
-    'Feature grid with six icon cards and a short intro',
-    'Footer with four link columns, a newsletter signup and social links',
-  ],
-}
-
 const REFINE_CHIPS: Record<Kind, string[]> = {
   component: ['Keyboard navigation', 'Empty, loading and error states', 'More compact', 'Polish the visual design'],
   block: ['Validation and error states', 'Responsive down to phones', 'Polish spacing and hierarchy'],
@@ -941,20 +920,24 @@ export default function App() {
   const errorCount = consoleEntries.filter((e) => e.level === 'error').length
   const canAsk = serverOk && !!manifest && !busy
 
-  const serverNotice = !serverOk ? (
-    serverLoading ? (
-      <p className="loading-note">
-        <span className="spinner-dot" /> Loading the model…
-      </p>
-    ) : (
-      <p className="warn">
-        No model running.{' '}
-        <button className="link" onClick={() => setPage('models')} title={serverStatus}>
-          Pick one
-        </button>
-      </p>
-    )
-  ) : null
+  // Memoized: the conversation pane is, and a new element every render would defeat it.
+  const serverNotice = useMemo(
+    () =>
+      serverOk ? null : serverLoading ? (
+        <p className="loading-note">
+          <span className="spinner-dot" /> Loading the model…
+        </p>
+      ) : (
+        <p className="warn">
+          No model running.{' '}
+          <button className="link" onClick={() => setPage('models')} title={serverStatus}>
+            Pick one
+          </button>
+        </p>
+      ),
+    [serverOk, serverLoading, serverStatus],
+  )
+  const clearConsole = useCallback(() => setConsoleEntries([]), [])
 
   if (!booted) {
     return (
@@ -1190,13 +1173,6 @@ export default function App() {
               showThought={settings.showReasoning}
               busy={busy}
               viewedVersion={viewedN}
-              newKind={newKind}
-              onKind={setNewKind}
-              examples={EXAMPLES[newKind]}
-              onExample={(ex) => {
-                setPrompt(ex)
-                composer.current?.focus()
-              }}
               onVersion={showVersion}
               onApplyReview={applyReview}
               notice={serverNotice}
@@ -1387,7 +1363,7 @@ export default function App() {
               />
             </div>
             <div className={`fill slot${tab === 'console' ? ' shown' : ''}`}>
-              <ConsoleView entries={consoleEntries} onClear={() => setConsoleEntries([])} />
+              <ConsoleView entries={consoleEntries} onClear={clearConsole} />
             </div>
           </div>
         </section>

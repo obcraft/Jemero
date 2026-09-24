@@ -86,10 +86,6 @@ type Props = {
   showThought: boolean
   busy: boolean
   viewedVersion: number
-  newKind: Kind
-  onKind: (kind: Kind) => void
-  examples: string[]
-  onExample: (text: string) => void
   onVersion: (n: number) => void
   onApplyReview: (points: string[]) => void
   notice?: ReactNode
@@ -103,10 +99,6 @@ function Conversation({
   showThought,
   busy,
   viewedVersion,
-  newKind,
-  onKind,
-  examples,
-  onExample,
   onVersion,
   onApplyReview,
   notice,
@@ -123,31 +115,6 @@ function Conversation({
 
   return (
     <div className="turns" ref={list}>
-      {!item && (
-        <div className="hint">
-          <h2>What should we build?</h2>
-          <p>
-            Any component, block or section. It renders live on the canvas, built by your local model, and you keep
-            refining it from there.
-          </p>
-          <div className="segmented kind-switch" role="radiogroup" aria-label="Size">
-            {(['component', 'block', 'section'] as Kind[]).map((k) => (
-              <button key={k} className={newKind === k ? 'seg active' : 'seg'} onClick={() => onKind(k)} role="radio" aria-checked={newKind === k}>
-                {KIND_LABEL[k]}
-              </button>
-            ))}
-          </div>
-          <div className="examples">
-            {examples.map((ex) => (
-              <button key={ex} onClick={() => onExample(ex)}>
-                {ex}
-              </button>
-            ))}
-          </div>
-          {notice}
-        </div>
-      )}
-
       {item && !turns.length && !live && <p className="turns-empty">Describe what you want below.</p>}
 
       {turns.map((t) => {
@@ -197,6 +164,8 @@ function Conversation({
           )}
         </div>
       )}
+
+      {notice}
 
       {live && thought && showThought && (
         <details className="thought">
