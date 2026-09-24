@@ -343,9 +343,14 @@ function registerLibraryIpc() {
   } catch (err) {
     console.error('[library] could not import library.json:', err.message)
   }
+  // Until the renderer has seen the stored library, an item missing from what
+  // it saves is one it never loaded, not one it deleted: after a failed load
+  // it starts empty, and pruning would wipe everything on its first save.
+  let loaded = false
   ipcMain.on('library:load', (e) => {
     try {
       e.returnValue = lib.load()
+      loaded = true
     } catch (err) {
       console.error('[library] load failed:', err.message)
       e.returnValue = null
@@ -361,7 +366,7 @@ function registerLibraryIpc() {
   // Awaited by the renderer, which keeps what failed to save and sends it again with the next change.
   ipcMain.handle('library:save', (_e, changes) => {
     try {
-      lib.saveChanges(changes)
+      lib.saveChanges(changes, { prune: loaded })
     } catch (err) {
       console.error('[library] save failed:', err.message)
       throw err

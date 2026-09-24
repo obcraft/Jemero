@@ -70,6 +70,15 @@ CREATE TABLE IF NOT EXISTS drafts (
 );
 `
 
+/** A JSON cell, or `fallback` when it doesn't parse: one bad cell must not hide the whole library. */
+function parseCell(text, fallback) {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return fallback
+  }
+}
+
 function openLibrary(dir) {
   const { DatabaseSync } = require('node:sqlite')
   fs.mkdirSync(dir, { recursive: true })
@@ -137,23 +146,26 @@ function openLibrary(dir) {
       kind: it.kind,
       createdAt: it.created_at,
       updatedAt: it.updated_at,
-      versions: q.versions.all(it.id).map((v) => ({
-        files: Object.fromEntries(q.files.all(it.id, v.n).map((f) => [f.path, f.content])),
-        entry: v.entry,
-        kit: v.kit,
-        ...(v.packs_json ? { packs: JSON.parse(v.packs_json) } : {}),
-        plan: v.plan,
-        prompt: v.prompt,
-        mode: v.mode,
-        createdAt: v.created_at,
-      })),
+      versions: q.versions.all(it.id).map((v) => {
+        const packs = v.packs_json ? parseCell(v.packs_json, null) : null
+        return {
+          files: Object.fromEntries(q.files.all(it.id, v.n).map((f) => [f.path, f.content])),
+          entry: v.entry,
+          kit: v.kit,
+          ...(packs ? { packs } : {}),
+          plan: v.plan,
+          prompt: v.prompt,
+          mode: v.mode,
+          createdAt: v.created_at,
+        }
+      }),
       turns: q.turns.all(it.id).map((t) => ({
         id: t.id,
         role: t.role,
         mode: t.mode,
         text: t.text,
         ...(t.plan != null ? { plan: t.plan } : {}),
-        ...(t.review_json != null ? { review: JSON.parse(t.review_json) } : {}),
+        ...(t.review_json != null ? { review: parseCell(t.review_json, []) } : {}),
         ...(t.version != null ? { version: t.version } : {}),
         ...(t.error != null ? { error: t.error } : {}),
         at: t.at,
@@ -212,12 +224,13 @@ function openLibrary(dir) {
    * every version of every item on each edit cost tens of milliseconds a
    * save on a big library. `order` is every item id in library order, so
    * removals and moves come with it; `items` are the items that changed.
+   * With `prune` off, items missing from `order` are kept rather than deleted.
    */
-  function saveChanges({ order, items }) {
+  function saveChanges({ order, items }, { prune = true } = {}) {
     const ids = Array.isArray(order) ? order : []
     const changed = new Map((Array.isArray(items) ? items : []).map((it) => [it.id, it]))
     tx(() => {
-      deleteMissing(new Set(ids))
+      if (prune) deleteMissing(new Set(ids))
       ids.forEach((id, position) => {
         const it = changed.get(id)
         if (it) writeItem(it, position)

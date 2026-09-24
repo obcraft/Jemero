@@ -84,6 +84,19 @@ test('saving changes writes only the changed items, and applies removals and ord
   }
 })
 
+test('without pruning, items missing from the order are kept', () => {
+  const dir = tmp()
+  try {
+    const lib = openLibrary(dir)
+    lib.save({ version: 1, items: [item('a'), item('b')] })
+    lib.saveChanges({ order: ['c'], items: [item('c')] }, { prune: false })
+    assert.deepEqual(lib.load().items.map((i) => i.id).sort(), ['a', 'b', 'c'])
+    lib.close()
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('drafts are saved as written, survive a reopen, and clear once the version is saved', () => {
   const dir = tmp()
   try {
