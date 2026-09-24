@@ -106,18 +106,32 @@ async function nodeHasDefault(spec) {
 
 const NO_DEFAULT = /No matching export in .* for import "default"/
 
+/** Canvas assets every build writes beside the vendor bundles. */
+const ASSETS = ['stage.html', 'stage.js', 'tailwind.js', 'tailwind-theme.css']
+
+/**
+ * The last build is still usable: same inputs, and every file it wrote is
+ * there. A manifest alone proves nothing (a partial copy or a clone that
+ * carried only some of public/kits has one), and a missing bundle is a canvas
+ * that can't import anything.
+ */
+function upToDate(manifestPath, inputs) {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    if (manifest.inputs !== inputs) return false
+    const written = [...ASSETS, ...Object.values(manifest.imports ?? {})]
+    return written.every((rel) => fs.existsSync(path.join(OUT, rel)))
+  } catch {
+    return false
+  }
+}
+
 async function main() {
   const inputs = inputsHash()
   const manifestPath = path.join(OUT, 'manifest.json')
-  if (process.argv.includes('--if-stale') && fs.existsSync(manifestPath)) {
-    try {
-      if (JSON.parse(fs.readFileSync(manifestPath, 'utf8')).inputs === inputs) {
-        console.log('kits: up to date')
-        return
-      }
-    } catch {
-      /* unreadable manifest: rebuild */
-    }
+  if (process.argv.includes('--if-stale') && upToDate(manifestPath, inputs)) {
+    console.log('kits: up to date')
+    return
   }
 
   const started = Date.now()
