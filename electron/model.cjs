@@ -12,7 +12,7 @@ const { spawn, execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 const { detect } = require('./hardware.cjs')
-const { recommend, planFor, lightSibling, TARGET_CTX } = require('./catalog.cjs')
+const { recommend, planFor, entryFor, lightSibling, TARGET_CTX } = require('./catalog.cjs')
 const { installed, ggufPath, adoptAtomicChatModels } = require('./install.cjs')
 const { ensureRuntime, appSupport } = require('./runtime.cjs')
 
@@ -112,7 +112,7 @@ function serverArgs(id, ctx) {
  * recommendation for this Mac, then the best-scoring thing that's downloaded.
  */
 async function choose() {
-  await adoptAtomicChatModels()
+  await adoptAtomicChatModels({ known: (id) => !!entryFor(id) })
   const device = detect()
   const { models, recommended } = recommend(device)
   const local = (await installed()).filter((m) => m.complete).map((m) => m.id)

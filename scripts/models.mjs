@@ -7,7 +7,7 @@
 //   npm run models:install         download the recommended model
 //   npm run models -- --install qwen2.5-coder-7b
 //   npm run models -- --search "gemma 1b"   any chat model on Hugging Face
-//   npm run models -- --search "gemma 1b" --install ggml-org/gemma-3-1b-it-Q8_0
+//   npm run models -- --search "gemma 1b" --install <an id the search printed>
 //   npm run models -- --json
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -36,7 +36,7 @@ if (!['speed', 'balanced', 'quality'].includes(priority)) {
 
 const device = detect()
 const { models, recommended, reasons } = recommend(device, priority)
-await store.adoptAtomicChatModels()
+await store.adoptAtomicChatModels({ known: (id) => !!entryFor(id) })
 const local = await store.installed()
 const installedIds = new Set(local.filter((m) => m.complete).map((m) => m.id))
 // Downloaded quants that aren't their family's pick under this priority.
@@ -89,10 +89,12 @@ if (flag('--install')) {
     console.error(`Unknown model: ${wanted}\nTry one of: ${models.map((m) => m.catalogId).join(', ')}`)
     process.exit(1)
   }
-  if (!pick.fits && !flag('--force')) {
+  // The app only ever serves a model that fits, so there is nothing to gain from downloading one that doesn't.
+  if (!pick.fits) {
     console.error(
       `${pick.label} ${pick.quant} needs about ${pick.needsGB} GB but this Mac can only wire ${device.budgetGB} GB.\n` +
-        `Install it anyway with --force (expect swapping), or pick a smaller one.`,
+        (pick.unsupportedReason ? `${pick.unsupportedReason}\n` : '') +
+        'Pick a smaller one.',
     )
     process.exit(1)
   }
@@ -129,7 +131,7 @@ if (flag('--install')) {
     process.exit(1)
   }
   console.log(`\nInstalled ${pick.modelId}`)
-  console.log(`Run \`npm start\` and the app will serve it at ${pick.ctx / 1024}k context.`)
+  console.log(`Run \`npm start\` and the app will serve it at ${pick.ctx.toLocaleString()} tokens of context.`)
   process.exit(0)
 }
 
