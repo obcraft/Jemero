@@ -275,9 +275,16 @@ function registerPackIpc() {
     }
   })
   ipcMain.handle('packs:install', async (_e, id) => {
+    let lastBytes = 0
     const res = await (await packs()).install(id, (p) => {
       // 'done' goes out once the canvas can actually load the pack.
       if (p.phase === 'done') return
+      // Byte counts arrive per network chunk; ten a second is plenty for a progress bar.
+      if (p.phase === 'downloading' && p.received < p.total) {
+        const now = Date.now()
+        if (now - lastBytes < 100) return
+        lastBytes = now
+      }
       if (win && !win.isDestroyed()) win.webContents.send('packs:progress', p)
     })
     if (res.ok) {

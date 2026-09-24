@@ -5,6 +5,7 @@
 const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
+const { pipeline } = require('node:stream')
 
 const TYPES = {
   '.json': 'application/json; charset=utf-8',
@@ -27,7 +28,13 @@ function startStaticServer(root, hooks = {}) {
   const server = http.createServer((req, res) => {
     if (hooks.onRequest?.(req, res)) return
     if (req.method !== 'GET' && req.method !== 'HEAD') return res.writeHead(405).end()
-    const rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '')
+    let rel
+    try {
+      rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '')
+    } catch {
+      return res.writeHead(400).end()
+    }
+    if (rel.includes('\0')) return res.writeHead(400).end()
     const file = path.resolve(base, rel)
     if (file !== base && !file.startsWith(base + path.sep)) return res.writeHead(403).end()
 
@@ -38,7 +45,7 @@ function startStaticServer(root, hooks = {}) {
       if (range) {
         const start = Number(range[1])
         const end = range[2] ? Math.min(Number(range[2]), stat.size - 1) : stat.size - 1
-        if (start >= stat.size) return res.writeHead(416, { 'content-range': `bytes */${stat.size}` }).end()
+        if (start >= stat.size || end < start) return res.writeHead(416, { 'content-range': `bytes */${stat.size}` }).end()
         res.writeHead(206, {
           'content-type': type,
           'content-length': end - start + 1,
@@ -46,11 +53,12 @@ function startStaticServer(root, hooks = {}) {
           'accept-ranges': 'bytes',
         })
         if (req.method === 'HEAD') return res.end()
-        return fs.createReadStream(file, { start, end }).pipe(res)
+        // pipeline, not pipe: a client that goes away closes the file too.
+        return pipeline(fs.createReadStream(file, { start, end }), res, () => {})
       }
       res.writeHead(200, { 'content-type': type, 'content-length': stat.size, 'accept-ranges': 'bytes' })
       if (req.method === 'HEAD') return res.end()
-      fs.createReadStream(file).pipe(res)
+      pipeline(fs.createReadStream(file), res, () => {})
     })
   })
 

@@ -31,9 +31,12 @@ function createPackRoutes(store) {
   let table = new Map() // url path -> { file, hash }
   let combined = { formatVersion: FORMAT_VERSION, packs: {}, imports: {}, styles: {}, problems: {} }
   let building = null
+  /** Bumped per rebuild: a slower, older one must not replace what a newer one found. */
+  let generation = 0
 
   /** Re-read and re-verify every active pack. Call after an install or a removal. */
   function rebuild() {
+    const mine = ++generation
     building = (async () => {
       const next = new Map()
       const out = { formatVersion: FORMAT_VERSION, packs: {}, imports: {}, styles: {}, problems: {} }
@@ -69,6 +72,7 @@ function createPackRoutes(store) {
           assets: manifest.assets,
         }
       }
+      if (mine !== generation) return combined
       table = next
       combined = out
       return out

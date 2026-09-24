@@ -128,6 +128,10 @@ async function buildPack(def, built) {
       const from = path.resolve(path.dirname(src), clean)
       const to = path.join(path.dirname(path.join(filesDir, sheet.to)), clean)
       if (!fs.existsSync(from)) throw new Error(`${def.id}: ${sheet.from} refers to ${ref}, which isn't in the package`)
+      // It must land inside the pack, or it's never hashed or shipped and the CSS points at nothing.
+      if (!path.resolve(to).startsWith(path.resolve(filesDir) + path.sep)) {
+        throw new Error(`${def.id}: ${sheet.from} refers to ${ref}, which would sit outside the pack's files`)
+      }
       fs.mkdirSync(path.dirname(to), { recursive: true })
       fs.copyFileSync(from, to)
     }
