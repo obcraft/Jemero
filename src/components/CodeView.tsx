@@ -64,7 +64,7 @@ function CodeView({ files, kitFiles, entry, editable, streaming, onEdit }: Props
 
   return (
     <div className={`codeview${fileTreeOpen ? '' : ' tree-closed'}`}>
-      <aside className="filetree" aria-hidden={!fileTreeOpen}>
+      <aside className="filetree" inert={!fileTreeOpen}>
         {own.map((p) => item(p))}
         {kit.length > 0 && (
           <details className="lib" open>

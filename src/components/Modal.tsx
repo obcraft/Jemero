@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+
 /**
  * The shell every panel in the app uses: one dialog, one animation, one set of
  * dismiss rules.
@@ -60,10 +62,28 @@ export default function Modal({
     if (!mounted) return
     panel.current?.focus()
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') return trapFocus(e)
       if (e.key !== 'Escape') return
       // Don't let the app's global Esc-to-stop fire as well.
       e.stopPropagation()
       onCloseRef.current()
+    }
+    // aria-modal only tells a screen reader; Tab has to be kept inside by hand.
+    const trapFocus = (e: KeyboardEvent) => {
+      const el = panel.current
+      if (!el) return
+      const focusable = [...el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((f) => !f.hasAttribute('disabled'))
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const at = document.activeElement
+      if (e.shiftKey && (at === first || at === el || !el.contains(at))) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (at === last || !el.contains(at))) {
+        e.preventDefault()
+        first.focus()
+      }
     }
     // Capture phase: this runs before App's window listener.
     window.addEventListener('keydown', onKey, true)

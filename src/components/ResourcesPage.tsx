@@ -88,7 +88,7 @@ export default function ResourcesPage({
   // Esc leaves the page, as on Models and Settings.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || document.querySelector('.sheet-backdrop')) return
+      if (e.key !== 'Escape' || document.querySelector('.sheet-backdrop, .menu')) return
       e.stopPropagation()
       onCloseRef.current()
     }

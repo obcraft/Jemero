@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { SYSTEM_PROMPT } from '../lib/systemPrompt'
 import type { Priority } from '../lib/models'
 import {
@@ -25,10 +25,10 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
   onCloseRef.current = onClose
 
   // Esc leaves the page. Capture phase, so the app's Esc-to-stop doesn't also fire;
-  // a dialog opened on top (the model browser) handles its own Esc first.
+  // a dialog or the model menu open on top handles its own Esc first.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || document.querySelector('.sheet-backdrop')) return
+      if (e.key !== 'Escape' || document.querySelector('.sheet-backdrop, .menu')) return
       e.stopPropagation()
       onCloseRef.current()
     }
@@ -157,6 +157,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                   max={1}
                   step={0.05}
                   value={s.temperature}
+                  aria-label="Temperature"
                   onChange={(e) => setSettings({ temperature: Number(e.target.value) })}
                 />
               </Row>
@@ -173,6 +174,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                   max={1}
                   step={0.01}
                   value={s.topP}
+                  aria-label="Top-p"
                   onChange={(e) => setSettings({ topP: Number(e.target.value) })}
                 />
               </Row>
@@ -241,6 +243,9 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
   )
 }
 
+/** A row's label, which names the control inside it for assistive technology. */
+const RowLabel = createContext<string | undefined>(undefined)
+
 export function Row({
   label,
   hint,
@@ -261,7 +266,9 @@ export function Row({
         </div>
         <p>{hint}</p>
       </div>
-      <div className="setting-control">{children}</div>
+      <div className="setting-control">
+        <RowLabel.Provider value={label}>{children}</RowLabel.Provider>
+      </div>
     </div>
   )
 }
@@ -275,10 +282,11 @@ function Segmented<T extends string>({
   options: [T, string][]
   onChange: (v: T) => void
 }) {
+  const name = useContext(RowLabel)
   return (
-    <div className="segmented tight">
+    <div className="segmented tight" role="radiogroup" aria-label={name}>
       {options.map(([id, label]) => (
-        <button key={id} className={value === id ? 'seg active' : 'seg'} onClick={() => onChange(id)}>
+        <button key={id} className={value === id ? 'seg active' : 'seg'} onClick={() => onChange(id)} role="radio" aria-checked={value === id}>
           {label}
         </button>
       ))}
@@ -295,11 +303,13 @@ export function Toggle({
   onChange: (v: boolean) => void
   disabled?: boolean
 }) {
+  const name = useContext(RowLabel)
   return (
     <button
       className={value ? 'switch on' : 'switch'}
       role="switch"
       aria-checked={value}
+      aria-label={name}
       disabled={disabled}
       onClick={() => onChange(!value)}
     >

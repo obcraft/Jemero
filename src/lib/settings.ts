@@ -142,9 +142,10 @@ export function setSettings(patch: Partial<Settings>) {
   emit()
 }
 
+/** Back to the defaults. What the app has already asked (first-run setup, the quantization prompt) stays answered. */
 export function resetSettings() {
-  current = DEFAULTS
-  persist(null)
+  current = { ...DEFAULTS, setupDone: current.setupDone, quantizePrompt: current.quantizePrompt }
+  persist(current)
   emit()
 }
 

@@ -119,7 +119,7 @@ export default function ModelBrowser({
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || document.querySelector('.sheet-backdrop')) return
+      if (e.key !== 'Escape' || document.querySelector('.sheet-backdrop, .menu')) return
       e.stopPropagation()
       onCloseRef.current()
     }
@@ -223,9 +223,9 @@ export default function ModelBrowser({
 
   const controls = (
     <div className="browser-controls">
-      <div className="segmented tight">
+      <div className="segmented tight" role="radiogroup" aria-label="Show">
         {VIEWS.map((v) => (
-          <button key={v.id} className={view === v.id ? 'seg active' : 'seg'} onClick={() => setView(v.id)}>
+          <button key={v.id} className={view === v.id ? 'seg active' : 'seg'} onClick={() => setView(v.id)} role="radio" aria-checked={view === v.id}>
             {v.label}
           </button>
         ))}
