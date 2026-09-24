@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import OfflineCheck from './OfflineCheck'
-import { bridge, loadSnapshot, type CatalogSnapshot, type Progress } from '../lib/models'
+import { bridge, cachedSnapshot, loadSnapshot, watchSnapshot, type CatalogSnapshot, type Progress } from '../lib/models'
 import { setSettings, useSettings } from '../lib/settings'
 import { Row, Toggle } from './SettingsPage'
 import type { Item } from '../lib/library'
@@ -38,12 +38,18 @@ export default function SetupPage({
   const [status, setStatus] = useState<Record<string, Status>>({})
   const [phase, setPhase] = useState<'choose' | 'working' | 'check'>('choose')
   const { quantize } = useSettings()
+  /** Set once setup is left: a download still running must not switch models or start packs after that. */
+  const left = useRef(false)
 
   useEffect(() => {
-    void loadSnapshot(true).then((s) => {
-      setSnap(s)
-      if (s) setModel(s.active ?? s.recommended)
-    })
+    left.current = false
+    void loadSnapshot(true).then(setSnap)
+    // Re-ranked when the quantization switch or a download changes the catalog.
+    const stop = watchSnapshot(() => setSnap(cachedSnapshot()))
+    return () => {
+      stop()
+      left.current = true
+    }
   }, [])
 
   useEffect(() => {
@@ -72,6 +78,12 @@ export default function SetupPage({
     return out
   }, [chosen, byId, installed])
 
+  // The pick follows the ranking: with quantization switched on, the
+  // recommended model is a different (4-bit) file with a different id.
+  useEffect(() => {
+    if (snap && !models.some((m) => m.modelId === model)) setModel(snap.active ?? snap.recommended)
+  }, [snap, models, model])
+
   const modelPlan = models.find((m) => m.modelId === model) ?? null
   const modelInstalled = !!snap?.installed.some((i) => i.id === model && i.complete)
   const modelBytes = modelPlan && !modelInstalled ? modelPlan.sizeGB * 1024 ** 3 : 0
@@ -79,6 +91,7 @@ export default function SetupPage({
   const disk = modelBytes + packPlan.reduce((n, p) => n + p.size.installed, 0)
 
   const finish = () => {
+    left.current = true
     // The quantization question was part of setup: don't ask it again on top.
     setSettings({ setupDone: true, quantizePrompt: false })
     onDone()
@@ -89,6 +102,7 @@ export default function SetupPage({
     if (!api) return
     setPhase('working')
     const set = (id: string, s: Status) => setStatus((prev) => ({ ...prev, [id]: s }))
+    const failed = (err: unknown) => ({ ok: false, reason: (err as Error).message })
 
     if (model && modelPlan) {
       const stop = api.onProgress((p: Progress) => {
@@ -97,23 +111,32 @@ export default function SetupPage({
         else if (p.phase === 'activating') set(model, { state: 'working', detail: 'Starting…' })
       })
       set(model, { state: 'working' })
-      const got = modelInstalled ? { ok: true } : await api.install(model)
-      const ran = got.ok && snap?.active !== model ? await api.activate(model) : got
-      stop()
-      set(model, ran.ok ? { state: 'done' } : { state: 'error', detail: ran.reason })
+      try {
+        const got = modelInstalled ? { ok: true } : await api.install(model).catch(failed)
+        // Skipped meanwhile: the download is kept, but whatever the user runs now stays.
+        if (left.current) return
+        const ran = got.ok && snap?.active !== model ? await api.activate(model).catch(failed) : got
+        set(model, ran.ok ? { state: 'done' } : { state: 'error', detail: ran.reason })
+      } finally {
+        stop()
+      }
     }
 
     const stop = api.packs.onProgress((p: PackProgress) => {
       if (!('total' in p) || !p.total) return
       set(p.id, { state: 'working', pct: p.received / p.total })
     })
-    for (const p of packPlan) {
-      set(p.id, { state: 'working' })
-      const res = await api.packs.install(p.id)
-      set(p.id, res.ok ? { state: 'done' } : { state: 'error', detail: res.reason })
+    try {
+      for (const p of packPlan) {
+        if (left.current) return
+        set(p.id, { state: 'working' })
+        const res = await api.packs.install(p.id).catch(failed)
+        set(p.id, res.ok ? { state: 'done' } : { state: 'error', detail: res.reason })
+      }
+    } finally {
+      stop()
     }
-    stop()
-    setPhase('check')
+    if (!left.current) setPhase('check')
   }
 
   const row = (id: string, name: string, meta: string) => {
@@ -222,7 +245,7 @@ export default function SetupPage({
                   {download ? `${fmt(download)} to download · ${fmt(disk)} on disk` : 'Nothing to download'}
                   {snap?.freeBytes != null && ` · ${fmt(snap.freeBytes)} free`}
                 </span>
-                <button className="btn" onClick={() => void start()} disabled={!model}>
+                <button className="btn" onClick={() => void start()} disabled={!modelPlan && !packPlan.length}>
                   {download ? 'Download' : 'Continue'}
                 </button>
               </div>

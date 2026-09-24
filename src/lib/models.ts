@@ -161,21 +161,37 @@ export function cachedSnapshot() {
   return cached
 }
 
+/** Bumped per request: only the newest one may replace the cache. */
+let latest = 0
+
+/**
+ * The catalog for this Mac. A forced reload supersedes any request still
+ * running, so an older answer (the priority before the last click, the
+ * model before a switch) never overwrites a newer one. A failed load keeps
+ * the last good snapshot.
+ */
 export async function loadSnapshot(force = false): Promise<CatalogSnapshot | null> {
   const api = bridge()
   if (!api) return null
   if (cached && !force) return cached
   if (!inFlight || force) {
-    inFlight = api
+    const ticket = ++latest
+    const request: Promise<CatalogSnapshot | null> = api
       .catalog(priority)
       .then((snap) => {
+        if (ticket !== latest) return cached
         cached = snap
         publish()
         return snap
       })
-      .finally(() => {
-        inFlight = null
+      .catch((err: Error) => {
+        console.warn('model catalog failed to load', err)
+        return cached
       })
+      .finally(() => {
+        if (inFlight === request) inFlight = null
+      })
+    inFlight = request
   }
   return inFlight
 }
