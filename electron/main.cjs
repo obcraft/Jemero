@@ -38,6 +38,10 @@ const chrome = () =>
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+/** Status and error text goes into the splash's HTML; a reason can quote a log line with `<` in it. */
+const escapeHtml = (text) =>
+  String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1400,
@@ -58,9 +62,10 @@ function createWindow() {
 
   win.once('ready-to-show', () => win.show())
 
-  // External links belong in the real browser, not in this window.
+  // External links belong in the real browser, not in this window. Web links
+  // only: any other scheme would hand an arbitrary URL to the OS to launch.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url)
     return { action: 'deny' }
   })
 
@@ -84,7 +89,7 @@ function showBootScreen(message) {
     @keyframes p{0%,100%{opacity:.25;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
     @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   </style><div class="w"><div class="l">⬢</div><div class="t">Jemero</div>
-  <div class="m">${message}</div><div class="d"></div></div>`
+  <div class="m">${escapeHtml(message)}</div><div class="d"></div></div>`
   win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
 }
 
@@ -245,7 +250,14 @@ async function startDevPackRoutes() {
   await packs()
   const http = require('node:http')
   const server = http.createServer((req, res) => {
-    packRoutes.handle(req, res).then((handled) => handled || res.writeHead(404).end())
+    packRoutes.handle(req, res).then(
+      (handled) => handled || res.writeHead(404).end(),
+      (err) => {
+        console.error('[packs]', req.url, err.message)
+        if (!res.headersSent) res.writeHead(500)
+        res.end()
+      },
+    )
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   process.env.JEMERO_PACK_ROUTES = `http://127.0.0.1:${server.address().port}`
@@ -453,19 +465,24 @@ async function bootstrap() {
   createWindow()
   showBootScreen('Starting…')
 
-  // A missing model is not a fatal error any more: the window opens on the
-  // model picker, which can download the right one for this Mac. Anything else
-  // (a runtime that can't be fetched, a server that won't start) still stops us here.
-  const result = await ensureModel((status) => showBootScreen(status))
-  if (!result.ok && !result.needsModel) {
-    showBootScreen(result.reason)
-    dialog.showMessageBox(win, {
-      type: 'error',
-      message: 'Could not start the local model',
-      detail: result.reason,
-      buttons: ['Quit'],
-    })
+  // A missing model is not fatal: the window opens on the model picker, which
+  // can download the right one for this Mac. Neither is a model that won't
+  // load: the picker opens so another one can be chosen, or this one deleted
+  // and downloaded again. Only a runtime that can't be found or fetched stops
+  // us here, since without it no model can run at all.
+  let result
+  try {
+    result = await ensureModel((status) => showBootScreen(status))
+  } catch (err) {
+    fail('Could not start the local model runtime', err.message)
     return
+  }
+  if (!result.ok && !result.needsModel) {
+    dialog.showMessageBox(win, {
+      type: 'warning',
+      message: 'Could not load the last model',
+      detail: `${result.reason}\n\nPick another model, or delete this one and download it again.`,
+    })
   }
 
   let url
@@ -485,10 +502,10 @@ async function bootstrap() {
     url = await startServer(path.join(__dirname, '..', 'dist'), { packRoutes })
   }
 
-  // Nothing downloaded yet: land on the model picker instead of an app that
-  // can't answer, with the right model for this Mac already selected.
+  // Nothing that can answer yet: land on the model picker instead of an app
+  // that can't, with the right model for this Mac already selected.
   // JEMERO_OPEN=models|settings opens straight onto that panel.
-  const open = result.needsModel ? 'models' : process.env.JEMERO_OPEN
+  const open = result.ok ? process.env.JEMERO_OPEN : 'models'
   win.loadURL(open === 'models' || open === 'settings' ? `${url}#${open}` : url)
 
   // Dev affordance: JEMERO_CAPTURE=<path> writes a PNG of the window contents
@@ -501,6 +518,14 @@ async function bootstrap() {
       console.log(`captured -> ${process.env.JEMERO_CAPTURE}`)
     })
   }
+}
+
+/** A failure nothing can recover from: say what it is, then quit when asked. */
+function fail(message, detail) {
+  console.error(`[boot] ${message}: ${detail}`)
+  if (!win || win.isDestroyed()) return app.quit()
+  showBootScreen(detail)
+  dialog.showMessageBox(win, { type: 'error', message, detail, buttons: ['Quit'] }).then(() => app.quit())
 }
 
 // Two instances would start two model servers on one port and race each other
@@ -519,7 +544,10 @@ if (!app.requestSingleInstanceLock()) {
     win.show()
     win.focus()
   })
-  app.whenReady().then(bootstrap)
+  app
+    .whenReady()
+    .then(bootstrap)
+    .catch((err) => fail('Jemero could not start', err.stack ?? err.message))
 
   // One window is the whole app, so closing it quits, the macOS habit of
   // staying alive in the Dock would keep the model's memory held for nothing.
