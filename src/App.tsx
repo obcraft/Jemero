@@ -538,78 +538,86 @@ export default function App() {
       const api = bridge()
       if (!api || !model) return pick([])
 
-      setPhase('choosing')
-      // Online means the pack server answered this request, not that Wi-Fi is on.
-      const list = await api.packs.list()
-      signal.throwIfAborted()
-      const online = list.ok && !list.fromCache && !!list.source
-      const catalog = list.packs.filter(isLocalPack)
-      const installedOnly = (): PackCandidate[] =>
-        Object.entries(inst.packs).map(([id, p]) => ({
-          id,
-          name: p.name,
-          description: p.description,
-          installed: true,
-          download: 0,
-          dependencies: p.dependencies,
-        }))
-      const candidates: PackCandidate[] = online
-        ? catalog.map((p) => ({
-            id: p.id,
+      try {
+        setPhase('choosing')
+        // Online means the pack server answered this request, not that Wi-Fi is on.
+        const list = await api.packs.list()
+        signal.throwIfAborted()
+        const online = list.ok && !list.fromCache && !!list.source
+        const catalog = list.packs.filter(isLocalPack)
+        const installedOnly = (): PackCandidate[] =>
+          Object.entries(inst.packs).map(([id, p]) => ({
+            id,
             name: p.name,
-            description: p.description ?? '',
-            installed: inst.packs[p.id]?.version === p.version,
-            download: inst.packs[p.id] ? 0 : p.size.download,
+            description: p.description,
+            installed: true,
+            download: 0,
             dependencies: p.dependencies,
           }))
-        : installedOnly()
-      let chosen = await selectPacks({ model, kind, request: text, candidates, signal })
+        const candidates: PackCandidate[] = online
+          ? catalog.map((p) => ({
+              id: p.id,
+              name: p.name,
+              description: p.description ?? '',
+              installed: inst.packs[p.id]?.version === p.version,
+              download: inst.packs[p.id] ? 0 : p.size.download,
+              dependencies: p.dependencies,
+            }))
+          : installedOnly()
+        let chosen = await selectPacks({ model, kind, request: text, candidates, signal })
 
-      const missing = chosen.filter((id) => !inst.packs[id])
-      if (!missing.length) return pick(chosen)
+        const missing = chosen.filter((id) => !inst.packs[id])
+        if (!missing.length) return pick(chosen)
 
-      // With dependencies, so the prompt shows the whole download.
-      const byId = new Map(catalog.map((p) => [p.id, p]))
-      const needed: LocalPack[] = []
-      const add = (id: string) => {
-        const p = byId.get(id)
-        if (!p || inst.packs[id] || needed.includes(p)) return
-        p.dependencies.forEach(add)
-        needed.push(p)
-      }
-      missing.forEach(add)
-
-      let failure = ''
-      if (await askInstall(needed, signal)) {
-        setPhase('installing')
-        for (const id of missing) {
-          const res = await api.packs.install(id)
-          signal.throwIfAborted()
-          if (!res.ok) {
-            failure = res.reason ?? 'The download failed.'
-            break
-          }
+        // With dependencies, so the prompt shows the whole download.
+        const byId = new Map(catalog.map((p) => [p.id, p]))
+        const needed: LocalPack[] = []
+        const add = (id: string) => {
+          const p = byId.get(id)
+          if (!p || inst.packs[id] || needed.includes(p)) return
+          p.dependencies.forEach(add)
+          needed.push(p)
         }
-        inst = await loadInstalledPacks()
-      } else {
-        signal.throwIfAborted()
-        failure = 'declined'
-      }
-      if (missing.every((id) => inst.packs[id])) return pick(chosen)
+        missing.forEach(add)
 
-      // Not installed: choose again among what is, and say so.
-      const names = needed.map((p) => p.name).join(', ')
-      addTurn(itemId, {
-        role: 'assistant',
-        mode,
-        text:
-          failure === 'declined'
-            ? `Building without ${names}, using what's installed.`
-            : `Couldn't install ${names}: ${failure} Building with what's installed instead.`,
-      })
-      setPhase('choosing')
-      chosen = await selectPacks({ model, kind, request: text, candidates: installedOnly(), signal })
-      return pick(chosen)
+        let failure = ''
+        if (await askInstall(needed, signal)) {
+          setPhase('installing')
+          for (const id of missing) {
+            const res = await api.packs.install(id)
+            signal.throwIfAborted()
+            if (!res.ok) {
+              failure = res.reason ?? 'The download failed.'
+              break
+            }
+          }
+          inst = await loadInstalledPacks()
+        } else {
+          signal.throwIfAborted()
+          failure = 'declined'
+        }
+        if (missing.every((id) => inst.packs[id])) return pick(chosen)
+
+        // Not installed: choose again among what is, and say so.
+        const names = needed.map((p) => p.name).join(', ')
+        addTurn(itemId, {
+          role: 'assistant',
+          mode,
+          text:
+            failure === 'declined'
+              ? `Building without ${names}, using what's installed.`
+              : `Couldn't install ${names}: ${failure} Building with what's installed instead.`,
+        })
+        setPhase('choosing')
+        chosen = await selectPacks({ model, kind, request: text, candidates: installedOnly(), signal })
+        return pick(chosen)
+      } catch (e) {
+        // Choosing is an optimisation, never a blocker: build with the kit and
+        // whatever this version already uses.
+        if (signal.aborted) throw e
+        console.warn('pack selection failed', e)
+        return pick([])
+      }
     },
     [model, askInstall],
   )
@@ -664,19 +672,16 @@ export default function App() {
       if (mode === 'build' || (settings.autoSwitchTabs && mode !== 'review')) setTab('code')
 
       // Pass one: which packs, installed before a line of code is written.
-      let chosenPacks: { id: string; pack: InstalledPack }[] = []
+      // It only throws when the run was stopped.
+      let chosenPacks: { id: string; pack: InstalledPack }[]
       try {
         chosenPacks = await resolvePacks({ mode, kind: target.kind, text, base, itemId, signal: controller.signal })
-      } catch (e) {
-        if (controller.signal.aborted) {
-          abort.current = null
-          running.current = null
-          setPhase('idle')
-          setDraft(null)
-          return
-        }
-        // Choosing is an optimisation, never a blocker: build with the kit alone.
-        console.warn('pack selection failed', e)
+      } catch {
+        abort.current = null
+        running.current = null
+        setPhase('idle')
+        setDraft(null)
+        return
       }
       const system = buildSystem({
         base: effectivePrompt(settings),
@@ -820,7 +825,6 @@ export default function App() {
           mode,
           createdAt: Date.now(),
         })
-        clearDraft(itemId)
         updateItem(itemId, (it) => ({ ...it, name: displayName(merged.entry) }))
         addTurn(itemId, { role: 'assistant', mode, text: p.prose, plan: p.plan || undefined, version: number })
         setViewed((v) => ({ ...v, [itemId]: number }))
@@ -829,6 +833,9 @@ export default function App() {
         if (controller.signal.aborted && !broken) return
         addTurn(itemId, { role: 'assistant', mode, text: '', error: (broken ?? (e as Error)).message })
       } finally {
+        // Saved, stopped or failed, the run ended here and was dealt with here.
+        // A draft only has to outlive a crash or a quit, never a run that ended.
+        clearDraft(itemId)
         if (abort.current === controller) {
           abort.current = null
           running.current = null
@@ -848,7 +855,6 @@ export default function App() {
     if (!controller) return
     // Send and Stop are the same button: a double-click on Send must not stop what it just started.
     if (e?.type === 'click' && performance.now() - startedAt.current < 600) return
-    console.info('[generate] stopped by the user', new Error().stack?.split('\n').slice(2, 5).join(' | '))
     controller.abort()
     if (run) addTurn(run.itemId, { role: 'assistant', mode: run.mode, text: 'Stopped.' })
   }, [])
