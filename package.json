@@ -54,7 +54,7 @@
   },
   "allowScripts": {
     "esbuild@0.21.5": true,
-    "electron@33.4.11": true
+    "electron@44.4.4": true
   },
   "main": "electron/main.cjs",
   "description": "Jemero: a component studio on a local model. Describe a component, block or section; it renders live on an offline canvas with the UI kit you pick. Native macOS, Apple Silicon."
