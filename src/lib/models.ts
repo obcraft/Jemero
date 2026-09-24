@@ -85,10 +85,11 @@ export type Progress = {
 
 type Bridge = {
   settings: { load(): unknown; save(value: unknown): void }
-  /** The component library (lib/library.ts), kept in library.json. */
+  /** The component library (lib/library.ts), kept in SQLite (electron/library-db.cjs). */
   library: {
     load(): unknown
-    save(value: unknown): void
+    /** The items that changed since the last save, and every item id in library order. */
+    save(changes: { order: string[]; items: unknown[] }): Promise<void>
     draft(itemId: string, files: { path: string; content: string; complete: boolean }[]): void
     clearDraft(itemId: string): void
     drafts(): Promise<Record<string, { path: string; content: string; complete: boolean; updatedAt: number }[]>>

@@ -17,7 +17,8 @@ contextBridge.exposeInMainWorld('jemero', {
   /** The component library: every component, version and conversation. */
   library: {
     load: () => ipcRenderer.sendSync('library:load'),
-    save: (value) => ipcRenderer.send('library:save', value),
+    /** The items that changed, plus every item id in order (removals and moves). */
+    save: (changes) => invoke('library:save', changes),
     /** Files of a generation in progress, saved as they're written. */
     draft: (itemId, files) => ipcRenderer.send('library:draft', itemId, files),
     clearDraft: (itemId) => ipcRenderer.send('library:clear-draft', itemId),

@@ -358,7 +358,15 @@ function registerLibraryIpc() {
       console.error(`[library] ${what} failed:`, err.message)
     }
   }
-  ipcMain.on('library:save', guarded('save', (_e, value) => lib.save(value)))
+  // Awaited by the renderer, which keeps what failed to save and sends it again with the next change.
+  ipcMain.handle('library:save', (_e, changes) => {
+    try {
+      lib.saveChanges(changes)
+    } catch (err) {
+      console.error('[library] save failed:', err.message)
+      throw err
+    }
+  })
   ipcMain.on('library:draft', guarded('draft', (_e, itemId, files) => lib.saveDraft(itemId, files)))
   ipcMain.on('library:clear-draft', guarded('clear draft', (_e, itemId) => lib.clearDraft(itemId)))
   ipcMain.handle('library:drafts', () => lib.drafts())

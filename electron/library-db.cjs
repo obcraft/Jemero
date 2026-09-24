@@ -101,6 +101,7 @@ function openLibrary(dir) {
          plan = excluded.plan, review_json = excluded.review_json, version = excluded.version, error = excluded.error, at = excluded.at`,
     ),
     itemIds: db.prepare('SELECT id FROM items'),
+    setPosition: db.prepare('UPDATE items SET position = ?1 WHERE id = ?2 AND position <> ?1'),
     deleteItem: db.prepare('DELETE FROM items WHERE id = ?'),
     deleteVersionsFrom: db.prepare('DELETE FROM versions WHERE item_id = ? AND n > ?'),
     deleteTurnsFrom: db.prepare('DELETE FROM turns WHERE item_id = ? AND seq >= ?'),
@@ -161,40 +162,66 @@ function openLibrary(dir) {
     return { version: 1, items }
   }
 
+  /** One item as given, at `position`: its row, every version and file, every turn. */
+  function writeItem(it, position) {
+    q.upsertItem.run(it.id, it.name ?? '', it.kind ?? 'component', position, it.createdAt ?? Date.now(), it.updatedAt ?? Date.now())
+    const versions = it.versions ?? []
+    versions.forEach((v, i) => {
+      const n = i + 1
+      q.upsertVersion.run(it.id, n, v.entry ?? '', v.kit ?? 'shadcn', v.packs ? JSON.stringify(v.packs) : null, v.plan ?? '', v.prompt ?? '', v.mode ?? 'build', v.createdAt ?? Date.now())
+      const files = v.files ?? {}
+      for (const [p, content] of Object.entries(files)) q.upsertFile.run(it.id, n, p, String(content))
+      for (const { path: p } of q.filePaths.all(it.id, n)) if (!(p in files)) q.deleteFile.run(it.id, n, p)
+    })
+    q.deleteVersionsFrom.run(it.id, versions.length)
+    const turns = it.turns ?? []
+    turns.forEach((t, seq) =>
+      q.upsertTurn.run(
+        it.id,
+        seq,
+        t.id ?? `${it.id}-${seq}`,
+        t.role,
+        t.mode ?? 'build',
+        t.text ?? '',
+        t.plan ?? null,
+        t.review ? JSON.stringify(t.review) : null,
+        t.version ?? null,
+        t.error ?? null,
+        t.at ?? Date.now(),
+      ),
+    )
+    q.deleteTurnsFrom.run(it.id, turns.length)
+  }
+
+  /** Items the database has that `keep` doesn't: removed, with everything under them. */
+  function deleteMissing(keep) {
+    for (const { id } of q.itemIds.all()) if (!keep.has(id)) q.deleteItem.run(id)
+  }
+
   /** Store the library as given: upserts, and deletes whatever it no longer has. */
   function save(library) {
     const items = Array.isArray(library?.items) ? library.items : []
     tx(() => {
-      const keep = new Set(items.map((i) => i.id))
-      for (const { id } of q.itemIds.all()) if (!keep.has(id)) q.deleteItem.run(id)
-      items.forEach((it, position) => {
-        q.upsertItem.run(it.id, it.name ?? '', it.kind ?? 'component', position, it.createdAt ?? Date.now(), it.updatedAt ?? Date.now())
-        const versions = it.versions ?? []
-        versions.forEach((v, i) => {
-          const n = i + 1
-          q.upsertVersion.run(it.id, n, v.entry ?? '', v.kit ?? 'shadcn', v.packs ? JSON.stringify(v.packs) : null, v.plan ?? '', v.prompt ?? '', v.mode ?? 'build', v.createdAt ?? Date.now())
-          const files = v.files ?? {}
-          for (const [p, content] of Object.entries(files)) q.upsertFile.run(it.id, n, p, String(content))
-          for (const { path: p } of q.filePaths.all(it.id, n)) if (!(p in files)) q.deleteFile.run(it.id, n, p)
-        })
-        q.deleteVersionsFrom.run(it.id, versions.length)
-        const turns = it.turns ?? []
-        turns.forEach((t, seq) =>
-          q.upsertTurn.run(
-            it.id,
-            seq,
-            t.id ?? `${it.id}-${seq}`,
-            t.role,
-            t.mode ?? 'build',
-            t.text ?? '',
-            t.plan ?? null,
-            t.review ? JSON.stringify(t.review) : null,
-            t.version ?? null,
-            t.error ?? null,
-            t.at ?? Date.now(),
-          ),
-        )
-        q.deleteTurnsFrom.run(it.id, turns.length)
+      deleteMissing(new Set(items.map((i) => i.id)))
+      items.forEach(writeItem)
+    })
+  }
+
+  /**
+   * What changed since the last save, which is what the app sends: rewriting
+   * every version of every item on each edit cost tens of milliseconds a
+   * save on a big library. `order` is every item id in library order, so
+   * removals and moves come with it; `items` are the items that changed.
+   */
+  function saveChanges({ order, items }) {
+    const ids = Array.isArray(order) ? order : []
+    const changed = new Map((Array.isArray(items) ? items : []).map((it) => [it.id, it]))
+    tx(() => {
+      deleteMissing(new Set(ids))
+      ids.forEach((id, position) => {
+        const it = changed.get(id)
+        if (it) writeItem(it, position)
+        else q.setPosition.run(position, id)
       })
     })
   }
@@ -232,7 +259,7 @@ function openLibrary(dir) {
     return true
   }
 
-  return { load, save, saveDraft, draft, drafts, clearDraft, migrateFromJson, close: () => db.close() }
+  return { load, save, saveChanges, saveDraft, draft, drafts, clearDraft, migrateFromJson, close: () => db.close() }
 }
 
 module.exports = { openLibrary }

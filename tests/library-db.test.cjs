@@ -64,6 +64,26 @@ test('saving again updates in place and removes what is gone', () => {
   }
 })
 
+test('saving changes writes only the changed items, and applies removals and order from the id list', () => {
+  const dir = tmp()
+  try {
+    const lib = openLibrary(dir)
+    lib.save({ version: 1, items: [item('a', 2), item('b'), item('c')] })
+    const b = item('b', 2)
+    b.name = 'Renamed'
+    // 'a' is sent by id only: whatever it held stays exactly as saved.
+    lib.saveChanges({ order: ['b', 'a'], items: [b] })
+    const out = lib.load()
+    assert.deepEqual(out.items.map((i) => i.id), ['b', 'a'])
+    assert.equal(out.items[0].name, 'Renamed')
+    assert.equal(out.items[0].versions.length, 2)
+    assert.deepEqual(out.items[1], item('a', 2))
+    lib.close()
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('drafts are saved as written, survive a reopen, and clear once the version is saved', () => {
   const dir = tmp()
   try {

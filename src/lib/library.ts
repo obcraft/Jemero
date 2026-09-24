@@ -79,15 +79,28 @@ function load(): Library {
 let current = load()
 const listeners = new Set<() => void>()
 let saveTimer: ReturnType<typeof setTimeout> | undefined
+/** Items changed since the last write. Removals travel as the id order. */
+const dirty = new Set<string>()
 
 function writeNow() {
   saveTimer = undefined
-  window.jemero?.library?.save(current)
-  try {
-    localStorage.setItem(KEY, JSON.stringify(current))
-  } catch {
-    /* private window or quota: the file copy still has it */
+  const db = window.jemero?.library
+  if (!db) {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(current))
+    } catch {
+      /* private window or quota: keep running on what's in memory */
+    }
+    return
   }
+  // Only what changed goes to the database: the whole library is megabytes
+  // once it has a history, far too much to copy and rewrite on every edit.
+  const changed = new Set(dirty)
+  dirty.clear()
+  db.save({ order: current.items.map((i) => i.id), items: current.items.filter((i) => changed.has(i.id)) }).catch(() => {
+    // Not written (disk full, say): it goes again with the next change.
+    for (const id of changed) dirty.add(id)
+  })
 }
 
 /** Edits arrive per keystroke in the code tab; writing once they settle is plenty. */
@@ -166,8 +179,10 @@ export async function recoverDrafts(): Promise<number> {
   return recovered
 }
 
-function commit(next: Library) {
+/** `changed` is the item whose content changed, if any; order changes are always saved. */
+function commit(next: Library, changed?: string) {
   current = next
+  if (changed) dirty.add(changed)
   persist()
   for (const fn of listeners) fn()
 }
@@ -188,15 +203,18 @@ export const findItem = (id: string | null) => (id ? (current.items.find((i) => 
 export function createItem(kind: Kind, name: string): Item {
   const now = Date.now()
   const item: Item = { id: newId(), name, kind, versions: [], turns: [], createdAt: now, updatedAt: now }
-  commit({ ...current, items: [item, ...current.items] })
+  commit({ ...current, items: [item, ...current.items] }, item.id)
   return item
 }
 
 export function updateItem(id: string, fn: (item: Item) => Item) {
-  commit({
-    ...current,
-    items: current.items.map((i) => (i.id === id ? { ...fn(i), updatedAt: Date.now() } : i)),
-  })
+  commit(
+    {
+      ...current,
+      items: current.items.map((i) => (i.id === id ? { ...fn(i), updatedAt: Date.now() } : i)),
+    },
+    id,
+  )
 }
 
 export function deleteItem(id: string) {
