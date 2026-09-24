@@ -294,14 +294,18 @@ function addMissingImports(
   }
 
   // Components and icons: PascalCase names read anywhere but never bound.
-  for (const [, name] of body.matchAll(/(?<![\w$.'"`])([A-Z][\w$]*)/g)) {
+  for (const name of new Set(Array.from(body.matchAll(/(?<![\w$.'"`])([A-Z][\w$]*)/g), (m) => m[1]))) {
     if (bound.has(name) || name === 'React') continue
+    // lucide has icons called Map, Infinity, Image, File, Text…: a built-in
+    // used as a value (new Map(), x < Infinity) means the built-in. Only a tag
+    // (<Map />) asks for the component.
+    if (name in globalThis && !new RegExp(`<${name}[\\s/>]`).test(body)) continue
     if (REACT_TAGS.has(name)) want('react', name)
     else if (candidates.has(name)) want(candidates.get(name)!, name)
     else if (icons.has(name)) want('lucide-react', name)
   }
   // Hooks and helpers: called but never bound.
-  for (const [, name] of body.matchAll(/(?<![\w$.])([a-z][\w$]*)\s*(?:<[^<>()]*>\s*)?\(/g)) {
+  for (const name of new Set(Array.from(body.matchAll(/(?<![\w$.])([a-z][\w$]*)\s*(?:<[^<>()]*>\s*)?\(/g), (m) => m[1]))) {
     if (bound.has(name)) continue
     if (REACT_CALLS.has(name)) want('react', name)
     else if (candidates.has(name)) want(candidates.get(name)!, name)
