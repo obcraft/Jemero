@@ -71,6 +71,13 @@ One list, two kinds of entry, told apart by `kind`:
 
 A local pack must provide at least one import or asset.
 
+The catalog itself may carry a `serial`: a non-negative integer that every
+publish raises (`npm run packs` uses the build time). It is signed with the
+index, and the app refuses a fresh index whose serial is lower than the last
+one it accepted, so an older index can't be served again to offer old
+versions. Independently, an install never replaces the active version with
+an older one; going back is what Roll back is for.
+
 ## Project lock
 
 Every saved `Version` in the library (`src/lib/library.ts`) can carry the

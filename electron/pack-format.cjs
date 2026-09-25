@@ -124,6 +124,10 @@ function validateCatalog(catalog) {
     return [`catalog: needs formatVersion ${FORMAT_VERSION} and a packs list`]
   }
   const errors = catalog.packs.flatMap(validatePack)
+  // Signed with the index and raised by every publish, so an older index can't be served in place of a newer one.
+  if (catalog.serial !== undefined && !(Number.isSafeInteger(catalog.serial) && catalog.serial >= 0)) {
+    errors.push('catalog: serial must be a non-negative integer')
+  }
   const byId = new Map()
   for (const p of catalog.packs) {
     if (byId.has(p.id)) errors.push(`${p.id}: listed twice`)
@@ -235,8 +239,24 @@ function verifyPackDir(dir, pack) {
   return problems
 }
 
+/** Semver order: negative when a is older than b. A pre-release sorts before its release. */
+function compareVersions(a, b) {
+  const parse = (v) => {
+    const [core, pre] = String(v).split('-', 2)
+    return { nums: core.split('.').map(Number), pre }
+  }
+  const x = parse(a)
+  const y = parse(b)
+  for (let i = 0; i < 3; i++) if (x.nums[i] !== y.nums[i]) return x.nums[i] - y.nums[i]
+  if (x.pre === y.pre) return 0
+  if (!x.pre) return 1
+  if (!y.pre) return -1
+  return x.pre < y.pre ? -1 : 1
+}
+
 module.exports = {
   FORMAT_VERSION,
+  compareVersions,
   CATEGORIES,
   KINDS,
   ASSET_TYPES,

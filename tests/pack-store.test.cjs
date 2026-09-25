@@ -12,7 +12,7 @@ const keys = generateKeys()
 const trust = { [keys.keyId]: keys.publicKeyDer }
 
 /** Publish packs to a folder laid out like packs-dist/. `packs`: [{ id, version, files: { path: content } }] */
-function publish(dir, packs, { key = keys.privateKeyPem } = {}) {
+function publish(dir, packs, { key = keys.privateKeyPem, serial } = {}) {
   const entries = packs.map(({ id, version, files, dependencies = [] }) => {
     const hashes = {}
     let bytes = 0
@@ -44,7 +44,7 @@ function publish(dir, packs, { key = keys.privateKeyPem } = {}) {
     fs.writeFileSync(path.join(dir, id, version, 'manifest.signed.json'), JSON.stringify(sign(pack, key)))
     return pack
   })
-  fs.writeFileSync(path.join(dir, 'index.signed.json'), JSON.stringify(sign({ formatVersion: 1, packs: entries }, key)))
+  fs.writeFileSync(path.join(dir, 'index.signed.json'), JSON.stringify(sign({ formatVersion: 1, ...(serial !== undefined && { serial }), packs: entries }, key)))
   return entries
 }
 
@@ -345,6 +345,39 @@ test('remove refuses anything that is not a pack id', async () => {
   const t = await setup()
   try {
     for (const id of ['..', '', 'a/b', '.staging']) assert.equal((await t.store().remove(id)).ok, false)
+  } finally {
+    await t.done()
+  }
+})
+
+test('an older signed index served again is not used in place of a newer one', async () => {
+  const t = await setup()
+  try {
+    publish(t.dist, [v2], { serial: 2 })
+    const store = t.store()
+    assert.equal((await store.catalog()).fromCache, false)
+    // A validly signed but older index: v1 offered as the current version.
+    publish(t.dist, [v1], { serial: 1 })
+    const { catalog, fromCache } = await store.catalog()
+    assert.equal(fromCache, true)
+    assert.equal(catalog.packs[0].version, '2.0.0')
+  } finally {
+    await t.done()
+  }
+})
+
+test('an index offering an older version than the installed one does not downgrade it', async () => {
+  const t = await setup()
+  try {
+    publish(t.dist, [v2])
+    const store = t.store()
+    assert.deepEqual(await store.install('demo'), { ok: true })
+    // No serial on either index, so this one is accepted; the install still refuses to go back.
+    publish(t.dist, [v1])
+    const res = await store.install('demo')
+    assert.equal(res.ok, false)
+    assert.match(res.reason, /older/)
+    assert.equal((await store.installed()).demo.version, '2.0.0')
   } finally {
     await t.done()
   }

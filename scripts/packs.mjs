@@ -200,7 +200,8 @@ async function main() {
     console.log(`packs: ${pack.id} ${pack.version}: ${Object.keys(pack.files).length} files, ${kb} KB`)
   }
 
-  const catalog = { formatVersion: FORMAT_VERSION, packs: [...built.values()] }
+  // serial: raised by every publish, so the app can refuse an older index served again.
+  const catalog = { formatVersion: FORMAT_VERSION, serial: Date.now(), packs: [...built.values()] }
   const errors = validateCatalog(catalog)
   if (errors.length) throw new Error(errors.join('\n'))
   fs.writeFileSync(path.join(OUT, 'index.signed.json'), JSON.stringify(sign(catalog, key), null, 2) + '\n')

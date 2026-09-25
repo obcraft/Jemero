@@ -24,7 +24,7 @@ const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const path = require('node:path')
 const { pipeline } = require('node:stream/promises')
-const { validatePack, validateCatalog, closure, verifyPackDir, sha256, FORMAT_VERSION } = require('./pack-format.cjs')
+const { validatePack, validateCatalog, closure, verifyPackDir, sha256, compareVersions, FORMAT_VERSION } = require('./pack-format.cjs')
 const signing = require('./pack-sign.cjs')
 
 const RETRIES = 3
@@ -161,16 +161,33 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
     return catalog
   }
 
+  /** The cached index, verified, or null. */
+  async function cachedCatalog() {
+    try {
+      return checkCatalog(JSON.parse(await fsp.readFile(catalogFile, 'utf8')))
+    } catch {
+      return null
+    }
+  }
+
   /**
    * The signed index of every pack. Fresh from the server when it can be
    * reached, otherwise the last one that verified, so the list still shows
    * what is installed on a plane.
+   *
+   * A signature proves who made an index, not when: an older one, served
+   * again, would verify too and offer old versions as the current ones. So a
+   * fresh index must not be older (by its signed serial) than the last one.
    */
   async function catalog() {
     if (base) {
       try {
         const envelope = await getJson(`${base}/index.signed.json`)
         const catalog = checkCatalog(envelope)
+        const known = await cachedCatalog()
+        if (known && (catalog.serial ?? -1) < (known.serial ?? -1)) {
+          throw new PackError('The pack server sent an older pack index than the one already seen, so it was not used.')
+        }
         // The copy for offline listing is a convenience: failing to write it
         // mustn't turn a fresh, verified index into "offline".
         await writeJsonAtomic(catalogFile, envelope).catch(() => {})
@@ -358,6 +375,11 @@ function createPackStore({ root, sourceUrl, trust = signing.loadTrust(), fetchIm
       const { catalog: cat } = await catalog()
       const target = cat.packs.find((p) => p.id === id)
       if (!target) throw new PackError(`There is no pack called ${id}.`)
+      const current = (await installed())[id]?.version
+      // Going back is what Roll back is for; an index that offers an older version is not an update.
+      if (current && compareVersions(target.version, current) < 0) {
+        throw new PackError(`${target.name} ${current} is installed; the pack index only offers the older ${target.version}.`)
+      }
       if (target.kind !== 'local') throw new PackError(`${target.name} is an online service; there is nothing to install.`)
       const order = closure(cat, [id])
       const active = await installed()
