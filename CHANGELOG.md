@@ -31,6 +31,7 @@ A stability release: no new features, many fixes to what 0.9.0 advertised.
 - A full disk during a download no longer crashes the app, and concurrent installs no longer lose one another.
 - Slow but steady downloads are no longer cut off after 30 seconds.
 - "Check again" can no longer hang the offline check.
+- An older, validly signed pack index served again is refused (the index now carries a signed serial), and an install never downgrades an active pack.
 
 ### Setup and settings
 - Skipping setup mid-download no longer switches models later. The model list follows the quantization switch, and "More models" returns to setup.
@@ -39,3 +40,4 @@ A stability release: no new features, many fixes to what 0.9.0 advertised.
 
 ### Build
 - `public/kits` build output is no longer committed. A fresh clone rebuilds the kit bundles instead of shipping a canvas with none.
+- Releases are built by GitHub Actions on an Apple Silicon runner when a version tag is pushed.

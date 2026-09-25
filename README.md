@@ -315,12 +315,16 @@ the signing mode from the environment:
 | **Ad-hoc** (default) | No certificate present | A sealed bundle; macOS asks once via *Open Anyway* |
 | **Developer ID + notarized** | `CSC_NAME` (or `CSC_LINK`) plus `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` | Opens with no warning at all |
 
-To release: bump `version` in `package.json`, then
+To release: bump `version` in `package.json`, add its section to `CHANGELOG.md`, then push a tag:
 
 ```bash
-npm run dist
-gh release create v1.0.0 release/Jemero-arm64.dmg --title "Jemero 1.0.0"
+git tag v1.0.0 && git push origin v1.0.0
 ```
+
+`.github/workflows/release.yml` builds the DMG on an Apple Silicon runner and publishes it
+as the release, with the changelog section as its notes. Signing secrets (`CSC_LINK`,
+`CSC_KEY_PASSWORD`, `APPLE_*`) make it a notarized Developer ID build. On a Mac,
+`npm run dist` builds the same DMG locally.
 
 The DMG name has no version in it, so the download link
 (`releases/latest/download/Jemero-arm64.dmg`) always serves the newest release. The website is `docs/index.html`, served by GitHub Pages

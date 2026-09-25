@@ -16,7 +16,7 @@
     "serve": "node scripts/serve.mjs",
     "stop": "node scripts/stop.mjs",
     "build": "node scripts/kits.mjs --if-stale && vite build",
-    "dist": "npm run build && node scripts/runtime.mjs --if-missing && electron-builder --mac --config electron-builder.config.cjs",
+    "dist": "npm run build && node scripts/runtime.mjs --if-missing && electron-builder --mac --config electron-builder.config.cjs --publish never",
     "runtime": "node scripts/runtime.mjs",
     "icon": "electron scripts/icon.cjs",
     "dmg:background": "electron scripts/dmg-background.cjs",
