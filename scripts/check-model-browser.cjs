@@ -13,10 +13,16 @@ app.whenReady().then(async () => {
   const device = { chip: 'Apple M4 Pro', ramGB: 24, budgetGB: 16.5, budgetBytes: 16.5 * 1024 ** 3, effectiveBandwidthGBs: 200 }
   const models = rank(device)
   const snapshot = { device, models, recommended: models[0].modelId, installed: [], active: null, priority: 'balanced', runtime: {}, freeBytes: 100 * 1024 ** 3 }
-  for (const store of ['settings', 'library']) {
-    ipcMain.on(`${store}:load`, e => { e.returnValue = null })
-    ipcMain.on(`${store}:save`, () => {})
-  }
+  ipcMain.on('settings:load', e => { e.returnValue = { setupDone: true, quantizePrompt: false } })
+  ipcMain.on('settings:save', () => {})
+  ipcMain.on('library:load', e => { e.returnValue = null })
+  ipcMain.handle('library:save', () => {})
+  ipcMain.handle('library:drafts', () => ({}))
+  ipcMain.on('library:draft', () => {})
+  ipcMain.on('library:clear-draft', () => {})
+  ipcMain.handle('packs:list', () => ({ ok: true, packs: [], installed: {}, fromCache: false, source: null }))
+  ipcMain.handle('models:quantization', () => ({ supported: false, reason: 'Fixture' }))
+  ipcMain.handle('models:set-quantization', () => {})
   ipcMain.handle('models:catalog', () => snapshot)
   ipcMain.handle('models:search', (_e, query, priority, page = 0) => ({ ok: true, hasMore: page === 0, results: [{ ...models.find(m => m.label === 'Gemma 3 1B'), modelId: `testing/remote-${page}`, repo: `testing/remote-${page}`, source: 'hub', author: 'testing', label: `Remote Gemma 1B page ${page + 1}` }] }))
   const downloads = []
