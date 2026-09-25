@@ -321,6 +321,7 @@ To release: bump `version` in `package.json`, add its section to `CHANGELOG.md`,
 git tag v1.0.0 && git push origin v1.0.0
 ```
 
+(Or run the Release workflow by hand on `main`; it tags the commit it builds.)
 `.github/workflows/release.yml` builds the DMG on an Apple Silicon runner and publishes it
 as the release, with the changelog section as its notes. Signing secrets (`CSC_LINK`,
 `CSC_KEY_PASSWORD`, `APPLE_*`) make it a notarized Developer ID build. On a Mac,
